@@ -1,0 +1,8 @@
+paho-mqtt
+sqlalchemy
+psycopg2-binary
+python-dateutil
+pyod
+pika
+numpy<1.17
+sklearn
