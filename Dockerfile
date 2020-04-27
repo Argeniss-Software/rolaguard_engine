@@ -1,4 +1,4 @@
-FROM golang:latest
+FROM golang:1.14.2-buster
 
 RUN apt-get update && apt-get install -y python3-pip
 
