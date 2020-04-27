@@ -4,7 +4,7 @@
 
 This repository contains the source code of the RoLaGuard engine. This component is the responsible of processing packets and generating alerts, quarantine devices, list them, between other tasks.
 
-To access the main project with instructions to easily run the rolaguard locally visit the [RoLaGuard](./../README.md) repository.  For contributions, please visit the [CONTRIBUTIONS](./../CONTRIBUTING.MD) file.
+To access the main project with instructions to easily run the rolaguard locally visit the [RoLaGuard](https://github.com/Argeniss-Software/rolaguard) repository. For contributions, please visit the [CONTRIBUTIONS](https://github.com/Argeniss-Software/rolaguard/blob/master/CONTRIBUTIONS.md) file
 
 ### Analyzers
 
