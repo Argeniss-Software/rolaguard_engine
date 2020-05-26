@@ -22,7 +22,7 @@ def process_packet(packet, policy):
         gateway = Gateway.create_from_packet(packet)
         gateway.save()
         DataCollectorToGateway.associate(packet.data_collector_id, gateway.id)
-        emit_alert("LAF-402", packet, gateway = gateway, gateway_name = packet.gw_name)
+        emit_alert("LAF-402", packet, gateway = gateway)
 
     ## Session instantiation
     device_session = DeviceSession.find_with(dev_addr = packet.dev_addr, data_collector_id = packet.data_collector_id)
@@ -39,8 +39,7 @@ def process_packet(packet, policy):
         DataCollectorToDevice.associate(packet.data_collector_id, device.id)
         if policy.is_enabled("LAF-400"):
             emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
-                        number_of_devices = DataCollector.number_of_devices(packet.data_collector_id),
-                        device_name = packet.dev_name)
+                        number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
     chrono.stop()
 
     ## Associations
@@ -77,12 +76,11 @@ def process_packet(packet, policy):
     ## Check alert LAF-400
     if device and not device.connected and policy.is_enabled("LAF-400"):
         emit_alert("LAF-400", packet, device=device, gateway=gateway,
-                    number_of_devices = DataCollector.number_of_devices(packet.data_collector_id),
-                    device_name = packet.dev_name)
+                    number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
 
     ## Check alert LAF-402
     if gateway and not gateway.connected and policy.is_enabled("LAF-402"):
-            emit_alert("LAF-402", packet, gateway = gateway, gateway_name = packet.gw_name)
+            emit_alert("LAF-402", packet, gateway = gateway)
 
     ## Check alert LAF-010
     if gateway and policy.is_enabled("LAF-010"):

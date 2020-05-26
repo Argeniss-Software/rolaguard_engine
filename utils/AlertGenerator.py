@@ -26,8 +26,12 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
         parameters['packet_date'] = packet.date.strftime('%Y-%m-%d %H:%M:%S')
         parameters['created_at'] = now
         parameters['dev_eui'] = device.dev_eui if device and device.dev_eui else None
+        parameters['dev_name'] = device.name if device and device.name else None
+        parameters['dev_vendor'] = device.vendor if device and device.vendor else None
         parameters['dev_addr'] = device_session.dev_addr if device_session and device_session.dev_addr else None
         parameters['gateway'] = gateway.gw_hex_id if gateway and gateway.gw_hex_id else None
+        parameters['gw_name'] = gateway.name if gateway and gateway.name else None
+        parameters['gw_vendor'] = gateway.vendor if gateway and gateway.vendor else None
 
         parameters.update(custom_parameters)
 
