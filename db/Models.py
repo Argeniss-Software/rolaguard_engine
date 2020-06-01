@@ -522,7 +522,7 @@ class Packet(Base):
     altitude = Column(Float, nullable=True)
     app_name = Column(String(100), nullable=True)
     dev_name = Column(String(100), nullable=True)
-    gw_name= Column(String(128), nullable=True)
+    gw_name= Column(String(120), nullable=True)
 
     def to_json(self):
         return {
