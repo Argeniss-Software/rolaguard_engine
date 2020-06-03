@@ -248,6 +248,7 @@ class Device(Base):
     dev_eui = Column(String(16), nullable=False)
     name = Column(String, nullable=True)
     vendor = Column(String, nullable=True)
+    app_name = Column(String, nullable=True)
     join_eui = Column(String(16), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
     
@@ -278,6 +279,7 @@ class Device(Base):
             organization_id = packet.organization_id,
             last_packet_id = packet.id,
             connected = True,
+            app_name = packet.app_name,
             last_activity = packet.date
             )
 
