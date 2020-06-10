@@ -91,7 +91,7 @@ def process_packet(packet, policy):
                         old_latitude = gateway.location_latitude,
                         old_longitude = gateway.location_longitude,
                         new_latitude = packet.latitude,
-                        new_longitude = packet.longitud)
+                        new_longitude = packet.longitude)
 
     if packet.m_type == "JoinRequest":
         # Check if DevNonce is repeated and save it
