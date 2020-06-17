@@ -250,7 +250,6 @@ class Device(Base):
     name = Column(String, nullable=True)
     vendor = Column(String, nullable=True)
     app_name = Column(String, nullable=True)
-    app_eui = Column(String, nullable=True)
     join_eui = Column(String(16), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
     
@@ -312,7 +311,6 @@ class Device(Base):
             if packet.m_type == "JoinRequest":
                 self.join_request_counter += 1
                 self.is_otaa = True
-                self.app_eui = LorawanWrapper.getJoinEUI(packet.data)
             self.last_activity = packet.date
             self.connected = True
             self.last_packet_id = packet.id
