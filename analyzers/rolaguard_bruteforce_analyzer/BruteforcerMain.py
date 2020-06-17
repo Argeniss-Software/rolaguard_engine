@@ -1,5 +1,5 @@
 import json, datetime, logging, os
-from analyzers.rolaguard_bruteforce_analyzer.lorawanwrapper import LorawanWrapper 
+from lorawanwrapper import LorawanWrapper 
 from utils import emit_alert
 from db.Models import Device, DeviceAuthData, PotentialAppKey, Quarantine
 

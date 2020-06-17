@@ -20,7 +20,7 @@ ADD . /root/app/
 RUN go get -d ./...
 
 # Compile go library
-WORKDIR /root/app/analyzers/rolaguard_bruteforce_analyzer/lorawanwrapper/utils
+WORKDIR /root/app/lorawanwrapper/utils
 RUN go build -o lorawanWrapper.so -buildmode=c-shared jsonUnmarshaler.go lorawanWrapper.go micGenerator.go sessionKeysGenerator.go hashGenerator.go
 
 WORKDIR /root/app/
