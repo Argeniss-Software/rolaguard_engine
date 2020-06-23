@@ -183,7 +183,6 @@ def process_packet(packet, policy):
             else:
                 logging.error("Cracked a JoinAccept but no device_auth object found")
 
-    print(f"test function: {is_on_quarantine("LAF-009", packet, device=device_obj)}")"
     if key_tested and len(result)==0 and is_on_quarantine("LAF-009", packet, device=device_obj):
         alert_type = AlertType.find_one_by_code("LAF-009")
         emit_alert(
@@ -194,11 +193,11 @@ def process_packet(packet, policy):
             alert_description=alert_type.description
         )
         Quarantine.remove_from_quarantine("LAF-009",
-                                            device_id = device_obj.id,
-                                            device_session_id = None,
-                                            data_collector_id = packet.data_collector_id,
-                                            res_reason_id = 3,
-                                            res_comment = "Appkey modified")
+                                          device_id = device_obj.id,
+                                          device_session_id = None,
+                                          data_collector_id = packet.data_collector_id,
+                                          res_reason_id = 3,
+                                          res_comment = "Appkey modified")
 
 
 def is_on_quarantine(alert_type, packet, device=None, device_session=None):
