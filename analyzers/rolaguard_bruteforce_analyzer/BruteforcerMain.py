@@ -1,7 +1,7 @@
 import json, datetime, logging, os
 from analyzers.rolaguard_bruteforce_analyzer.lorawanwrapper import LorawanWrapper 
 from utils import emit_alert
-from db.Models import Device, DeviceAuthData, PotentialAppKey, Quarantine
+from db.Models import Device, DeviceAuthData, PotentialAppKey, Quarantine, AlertType
 
 
 device_auth_obj = None
@@ -19,6 +19,7 @@ def add(keyList, key):
 
 def process_packet(packet, policy):
     result = ""  
+    key_tested = False
     global device_auth_obj  
     global dontGenerateKeys
     global keys
@@ -48,6 +49,7 @@ def process_packet(packet, policy):
 
                 keys_to_test = list(dict.fromkeys(keys_to_test))
                 correct_app_keys = LorawanWrapper.testAppKeysWithJoinRequest(keys_to_test, packet.data, True).split()
+                key_tested = True
 
                 if len(correct_app_keys) > 1:
                     logging.warning("Found more than one possible keys for the device {0}. One of them should be the correct. Check it manually. Keys: {1}".format(packet.dev_eui, correct_app_keys))
@@ -65,14 +67,6 @@ def process_packet(packet, policy):
                                 packet_type_1 = "JoinRequest",
                                 packet_type_2 = "JoinRequest")
                     return
-                else:
-                    emit_alert("LAF-600", packet, device=device_obj)
-                    Quarantine.remove_from_quarantine("LAF-009",
-                                                      device_id = device_obj.id,
-                                                      device_session_id = None,
-                                                      data_collector_id = packet.data_collector_id,
-                                                      res_reason_id = 3,
-                                                      res_comment = "Appkey modified")
         
         # Check if the DeviceAuthData wasn't already generated
         never_bruteforced = False
@@ -102,6 +96,7 @@ def process_packet(packet, policy):
         if elapsed.seconds > 3600 * hours_betweeen_bruteforce_trials or never_bruteforced:
             
             result = LorawanWrapper.testAppKeysWithJoinRequest(keys, packet.data, dontGenerateKeys)
+            key_tested = True
 
             # Update the last time it was broteforced
             device_auth_obj.created_at= datetime.datetime.now()
@@ -138,18 +133,17 @@ def process_packet(packet, policy):
             organization_keys= PotentialAppKey.find_all_by_organization_id_after_datetime(packet.organization_id, last_seconds_date)
 
             # Return if no JR keys were found
-            if len(organization_keys) == 0:
-                return 
+            if len(organization_keys) != 0:
+                keys_array= list()
+                for pk in organization_keys:
+                    # Fetch keys in byte format. Needed by ctypes
+                    keys_array.append(bytes(pk.app_key_hex.rstrip().upper(), encoding='utf-8')) 
 
-            keys_array= list()
-            for pk in organization_keys:
-                # Fetch keys in byte format. Needed by ctypes
-                keys_array.append(bytes(pk.app_key_hex.rstrip().upper(), encoding='utf-8')) 
+                # Remove possible duplicates in array
+                keys_array = list(dict.fromkeys(keys_array))
 
-            # Remove possible duplicates in array
-            keys_array = list(dict.fromkeys(keys_array))
-
-            result = LorawanWrapper.testAppKeysWithJoinAccept(keys_array, packet.data, True)
+                result = LorawanWrapper.testAppKeysWithJoinAccept(keys_array, packet.data, True)
+                key_tested = True
         except Exception as es:
             logging.error(f"Error trying to bforce JA: {es}")
 
@@ -163,32 +157,62 @@ def process_packet(packet, policy):
                     device_auth_obj = DeviceAuthData.find_one_by_id(potential_key_obj.device_auth_data_id)
                     break
             
-            if device_auth_obj is None:
+            if device_auth_obj:
+                #Add missing data
+                device_auth_obj.join_accept = packet.data
+                device_auth_obj.join_accept_packet_id = packet.id
+                device_auth_obj.app_key_hex = result
+                
+                # Add session keys
+                device_auth_obj= deriveSessionKeys(device_auth_obj, result)
+
+                # Get the device to get dev_eui
+                device_obj= Device.get(device_auth_obj.device_id)
+
+                # Get DevAddr from JA packet
+                dev_addr = LorawanWrapper.getDevAddr(result, packet.data)
+
+                emit_alert("LAF-009", packet, 
+                            device=device_obj, 
+                            device_auth_id=device_auth_obj.id,
+                            app_key = result,
+                            dev_addr = dev_addr,
+                            packet_id_1 = device_auth_obj.join_request_packet_id,
+                            packet_type_1 = "JoinRequest",
+                            packet_type_2 = "JoinAccept")
+            else:
                 logging.error("Cracked a JoinAccept but no device_auth object found")
-                return
 
-            #Add missing data
-            device_auth_obj.join_accept = packet.data
-            device_auth_obj.join_accept_packet_id = packet.id
-            device_auth_obj.app_key_hex = result
-            
-            # Add session keys
-            device_auth_obj= deriveSessionKeys(device_auth_obj, result)
+    if key_tested and len(result)==0 and is_on_quarantine("LAF-009", packet, device=device_obj):
+        alert_type = AlertType.find_one_by_code("LAF-009")
+        emit_alert(
+            "LAF-600",
+            packet,
+            device=device_obj,
+            alert_solved=alert_type.name,
+            alert_description=alert_type.description
+        )
+        Quarantine.remove_from_quarantine("LAF-009",
+                                          device_id = device_obj.id,
+                                          device_session_id = None,
+                                          data_collector_id = packet.data_collector_id,
+                                          res_reason_id = 3,
+                                          res_comment = "Appkey modified")
 
-            # Get the device to get dev_eui
-            device_obj= Device.get(device_auth_obj.device_id)
 
-            # Get DevAddr from JA packet
-            dev_addr = LorawanWrapper.getDevAddr(result, packet.data)
-
-            emit_alert("LAF-009", packet, 
-                        device=device_obj, 
-                        device_auth_id=device_auth_obj.id,
-                        app_key = result,
-                        dev_addr = dev_addr,
-                        packet_id_1 = device_auth_obj.join_request_packet_id,
-                        packet_type_1 = "JoinRequest",
-                        packet_type_2 = "JoinAccept")
+def is_on_quarantine(alert_type, packet, device=None, device_session=None):
+    """
+    Inform if an alert/device or alert/device_session is on quarantine
+    """
+    if device is None and device_session is None:
+        raise Exception("Must provide device or device_session")
+    quarantine_row = None
+    if alert_type in quarantined_alerts:
+        quarantine_row = Quarantine.find_open_by_type_dev_coll(alert_type,
+                                                                device.id if device else None,
+                                                                device_session.id if device_session else None,
+                                                                packet.data_collector_id)
+    return quarantine_row is not None 
 
 
 def deriveSessionKeys(device_auth_obj, appKey):
