@@ -133,19 +133,17 @@ def process_packet(packet, policy):
             organization_keys= PotentialAppKey.find_all_by_organization_id_after_datetime(packet.organization_id, last_seconds_date)
 
             # Return if no JR keys were found
-            if len(organization_keys) == 0:
-                return 
+            if len(organization_keys) != 0:
+                keys_array= list()
+                for pk in organization_keys:
+                    # Fetch keys in byte format. Needed by ctypes
+                    keys_array.append(bytes(pk.app_key_hex.rstrip().upper(), encoding='utf-8')) 
 
-            keys_array= list()
-            for pk in organization_keys:
-                # Fetch keys in byte format. Needed by ctypes
-                keys_array.append(bytes(pk.app_key_hex.rstrip().upper(), encoding='utf-8')) 
+                # Remove possible duplicates in array
+                keys_array = list(dict.fromkeys(keys_array))
 
-            # Remove possible duplicates in array
-            keys_array = list(dict.fromkeys(keys_array))
-
-            result = LorawanWrapper.testAppKeysWithJoinAccept(keys_array, packet.data, True)
-            key_tested = True
+                result = LorawanWrapper.testAppKeysWithJoinAccept(keys_array, packet.data, True)
+                key_tested = True
         except Exception as es:
             logging.error(f"Error trying to bforce JA: {es}")
 
@@ -159,32 +157,33 @@ def process_packet(packet, policy):
                     device_auth_obj = DeviceAuthData.find_one_by_id(potential_key_obj.device_auth_data_id)
                     break
             
-            if device_auth_obj is None:
+            if device_auth_obj:
+                #Add missing data
+                device_auth_obj.join_accept = packet.data
+                device_auth_obj.join_accept_packet_id = packet.id
+                device_auth_obj.app_key_hex = result
+                
+                # Add session keys
+                device_auth_obj= deriveSessionKeys(device_auth_obj, result)
+
+                # Get the device to get dev_eui
+                device_obj= Device.get(device_auth_obj.device_id)
+
+                # Get DevAddr from JA packet
+                dev_addr = LorawanWrapper.getDevAddr(result, packet.data)
+
+                emit_alert("LAF-009", packet, 
+                            device=device_obj, 
+                            device_auth_id=device_auth_obj.id,
+                            app_key = result,
+                            dev_addr = dev_addr,
+                            packet_id_1 = device_auth_obj.join_request_packet_id,
+                            packet_type_1 = "JoinRequest",
+                            packet_type_2 = "JoinAccept")
+            else:
                 logging.error("Cracked a JoinAccept but no device_auth object found")
-                return
 
-            #Add missing data
-            device_auth_obj.join_accept = packet.data
-            device_auth_obj.join_accept_packet_id = packet.id
-            device_auth_obj.app_key_hex = result
-            
-            # Add session keys
-            device_auth_obj= deriveSessionKeys(device_auth_obj, result)
-
-            # Get the device to get dev_eui
-            device_obj= Device.get(device_auth_obj.device_id)
-
-            # Get DevAddr from JA packet
-            dev_addr = LorawanWrapper.getDevAddr(result, packet.data)
-
-            emit_alert("LAF-009", packet, 
-                        device=device_obj, 
-                        device_auth_id=device_auth_obj.id,
-                        app_key = result,
-                        dev_addr = dev_addr,
-                        packet_id_1 = device_auth_obj.join_request_packet_id,
-                        packet_type_1 = "JoinRequest",
-                        packet_type_2 = "JoinAccept")
+    print(f"test function: {is_on_quarantine("LAF-009", packet, device=device_obj)}")"
     if key_tested and len(result)==0 and is_on_quarantine("LAF-009", packet, device=device_obj):
         alert_type = AlertType.find_one_by_code("LAF-009")
         emit_alert(
