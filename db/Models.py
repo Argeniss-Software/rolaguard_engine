@@ -138,7 +138,7 @@ class Gateway(Base):
 
     def update_state(self, packet):
         try:
-            if packet.latitude and packet.longitude and (packet.latitude > 0 or packet.longitude > 0):
+            if packet.latitude and packet.longitude:
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
             self.last_activity = packet.date
