@@ -206,12 +206,10 @@ def is_on_quarantine(alert_type, packet, device=None, device_session=None):
     """
     if device is None and device_session is None:
         raise Exception("Must provide device or device_session")
-    quarantine_row = None
-    if alert_type in quarantined_alerts:
-        quarantine_row = Quarantine.find_open_by_type_dev_coll(alert_type,
-                                                                device.id if device else None,
-                                                                device_session.id if device_session else None,
-                                                                packet.data_collector_id)
+    quarantine_row = Quarantine.find_open_by_type_dev_coll(alert_type,
+                                                           device.id if device else None,
+                                                           device_session.id if device_session else None,
+                                                           packet.data_collector_id)
     return quarantine_row is not None 
 
 
