@@ -18,6 +18,11 @@ log.getLogger("pika").setLevel(log.WARNING)
 
 policy_manager = PolicyManager()
 
+ai_analyzer = None
+base_analyzer = None
+bruteforce_analyzer = None
+LafPrinter = None
+
 def processData():
     # Save the packet ids that have to be processed by the selected modules
     report_start_time = dt.datetime.now()
