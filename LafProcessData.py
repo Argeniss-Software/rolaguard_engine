@@ -222,8 +222,8 @@ def import_analyzers():
             global ai_analyzer
             ai_analyzer = importlib.import_module("analyzers.rolaguard_ai_analyzer")
             log.debug("IA analyzer module ON")
-        except ImportError:
-            log.error(f"AI module not available")
+        except ImportError as e:
+            log.error(f"AI module not available: {e}")
 
     if options.analyze:
         try:
