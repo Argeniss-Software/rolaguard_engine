@@ -89,6 +89,8 @@ class Gateway(Base):
     __tablename__ = 'gateway'
     id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     gw_hex_id = Column(String(16), nullable=False)
+    name = Column(String, nullable=True)
+    vendor = Column(String, nullable=True)
     location_latitude = Column(Float, nullable=True)
     location_longitude = Column(Float, nullable=True)
     data_collector_id = Column(BigIntegerType, ForeignKey("data_collector.id"), nullable=False)
@@ -98,9 +100,14 @@ class Gateway(Base):
     last_activity = Column(DateTime(timezone=True), nullable=False)
 
     @classmethod
-    def create_from_packet(self, packet):
+    def create_from_packet(cls, packet):
+        vendor = None
+        if len(packet.gateway) == 16:
+            vendor = DeviceVendorPrefix.get_vendor_from_dev_eui(packet.gateway)
         return Gateway(
             gw_hex_id = packet.gateway,
+            name = packet.gw_name,
+            vendor = vendor,
             data_collector_id = packet.data_collector_id,
             organization_id = packet.organization_id,
             connected = True,
@@ -108,7 +115,7 @@ class Gateway(Base):
         )
 
     @classmethod
-    def find_with(self, gw_hex_id, data_collector_id):
+    def find_with(cls, gw_hex_id, data_collector_id):
         if gw_hex_id and data_collector_id:
             return session.query(Gateway).\
                 filter(Gateway.gw_hex_id == gw_hex_id).\
@@ -239,6 +246,9 @@ class Device(Base):
     __tablename__ = 'device'
     id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     dev_eui = Column(String(16), nullable=False)
+    name = Column(String, nullable=True)
+    vendor = Column(String, nullable=True)
+    app_name = Column(String, nullable=True)
     join_eui = Column(String(16), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
     
@@ -260,12 +270,16 @@ class Device(Base):
 
     @classmethod
     def create_from_packet(cls, packet):
+        vendor = DeviceVendorPrefix.get_vendor_from_dev_eui(packet.dev_eui)
         return Device(
             dev_eui = packet.dev_eui,
+            name = packet.dev_name,
+            vendor = vendor,
             join_eui = packet.join_eui,
             organization_id = packet.organization_id,
             last_packet_id = packet.id,
             connected = True,
+            app_name = packet.app_name,
             last_activity = packet.date
             )
 
@@ -303,6 +317,22 @@ class Device(Base):
             log.error(f"Error while updating device {self.dev_eui}: {exc}")
 
     
+class DeviceVendorPrefix(Base):
+    __tablename__ = 'device_vendor_prefix'
+    id = Column(BigIntegerType, primary_key=True)
+    prefix = Column(String, nullable=False)
+    vendor = Column(String, nullable=False)
+
+    @classmethod
+    def get_vendor_from_dev_eui(cls, dev_eui):
+        prefix = dev_eui[0:6]
+        row = session.query(cls).filter(cls.prefix == prefix).first()
+        try:
+            return row.vendor
+        except:
+            return None
+
+
 class DevNonce(Base):
     __tablename__ = 'dev_nonce'
     id = Column(BigIntegerType, primary_key=True, autoincrement=True)
@@ -494,7 +524,7 @@ class Packet(Base):
     altitude = Column(Float, nullable=True)
     app_name = Column(String(100), nullable=True)
     dev_name = Column(String(100), nullable=True)
-    gw_name= Column(String(128), nullable=True)
+    gw_name= Column(String(120), nullable=True)
 
     def to_json(self):
         return {
