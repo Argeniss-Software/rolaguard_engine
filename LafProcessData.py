@@ -211,8 +211,9 @@ def import_analyzers():
             if options.hours>0:
                 print ("- Will wait {0} hours between bruteforces for each device".format(options.hours))
             bruteforce_analyzer.init(keysPath, options.no_gen, options.hours)
-        except ImportError:
-            log.error("Bruteforcer module not available")
+        except ImportError as e:
+            log.error(f"Error loading bruteforcer module: {e}")
+            exit(1)
     else:
         if options.keys is not None or options.no_gen is not None:
             log.debug("Bruteforce module OFF - Won't accept its suboptions")
@@ -223,15 +224,17 @@ def import_analyzers():
             ai_analyzer = importlib.import_module("analyzers.rolaguard_ai_analyzer")
             log.debug("IA analyzer module ON")
         except ImportError as e:
-            log.error(f"AI module not available: {e}")
+            log.error(f"Error loading AI module: {e}")
+            exit(1)
 
     if options.analyze:
         try:
             global base_analyzer
             base_analyzer = importlib.import_module("analyzers.rolaguard_base_analyzer")
             log.debug("Analyzer module ON")
-        except ImportError:
-            log.error("Analyzer module not available")
+        except ImportError as e:
+            log.error(f"Error loading base module: {e}")
+            exit(1)
 
     print ("\n********************************************\n")
 
