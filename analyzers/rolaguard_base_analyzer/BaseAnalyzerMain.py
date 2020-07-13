@@ -170,10 +170,12 @@ def process_packet(packet, policy):
             policy.is_enabled("LAF-007") and
             # Have the last uplink mic for this device session
             device_session.id in last_uplink_mic and
-            # Received a counter smaller than the expected
-            packet.f_count <= device_session.up_link_counter and
-            # The mics are different
-            last_uplink_mic[device_session.id] != packet.mic and
+            (
+                # Received a counter smaller than the expected
+                (packet.f_count < device_session.up_link_counter) or
+                # Or equal but with a different mic
+                ((packet.f_count == device_session.up_link_counter) and (last_uplink_mic[device_session.id] != packet.mic))
+            ) and
             # To avoid errors when the counter overflows
             (packet.f_count > 5 or device_session.up_link_counter < 65530)
             ) :
