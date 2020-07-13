@@ -165,12 +165,17 @@ def process_packet(packet, policy):
 
                     device_session.reset_counter += 1
         
-        elif (
+        elif ( # Conditions to emit a LAF-007
+            # The policy is enabled
             policy.is_enabled("LAF-007") and
+            # Have the last uplink mic for this device session
             device_session.id in last_uplink_mic and
-            packet.f_count > 5 and device_session.up_link_counter < 65530 and
-            packet.f_count < device_session.up_link_counter and
-            last_uplink_mic[device_session.id] != packet.mic
+            # Received a counter smaller than the expected
+            packet.f_count <= device_session.up_link_counter and
+            # The mics are different
+            last_uplink_mic[device_session.id] != packet.mic and
+            # To avoid errors when the counter overflows
+            (packet.f_count > 5 or device_session.up_link_counter < 65530)
             ) :
                 emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
                             counter=device_session.up_link_counter,
