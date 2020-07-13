@@ -165,16 +165,17 @@ def process_packet(packet, policy):
 
                     device_session.reset_counter += 1
         
-        elif packet.f_count <= device_session.up_link_counter:
-
-            # Make sure we have processed at least one packet for this device in this run before firing the alarm
-            if (device_session.id in last_uplink_mic) and policy.is_enabled("LAF-007"):
-                # Skip if received the same counter as previous packet and mics are equal
-                if not (packet.f_count == device_session.up_link_counter and last_uplink_mic[device_session.id] == packet.mic): 
-                    emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
-                                counter=device_session.up_link_counter,
-                                new_counter=packet.f_count,
-                                prev_packet_id=device_session.last_packet_id)
+        elif (
+            policy.is_enabled("LAF-007") and
+            device_session.id in last_uplink_mic and
+            packet.f_count > 5 and device_session.up_link_counter < 65530 and
+            packet.f_count < device_session.up_link_counter and
+            last_uplink_mic[device_session.id] != packet.mic
+            ) :
+                emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
+                            counter=device_session.up_link_counter,
+                            new_counter=packet.f_count,
+                            prev_packet_id=device_session.last_packet_id)
 
         last_uplink_mic[device_session.id]= packet.mic
 
