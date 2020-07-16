@@ -165,16 +165,24 @@ def process_packet(packet, policy):
 
                     device_session.reset_counter += 1
         
-        elif packet.f_count <= device_session.up_link_counter:
-
-            # Make sure we have processed at least one packet for this device in this run before firing the alarm
-            if (device_session.id in last_uplink_mic) and policy.is_enabled("LAF-007"):
-                # Skip if received the same counter as previous packet and mics are equal
-                if not (packet.f_count == device_session.up_link_counter and last_uplink_mic[device_session.id] == packet.mic): 
-                    emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
-                                counter=device_session.up_link_counter,
-                                new_counter=packet.f_count,
-                                prev_packet_id=device_session.last_packet_id)
+        elif ( # Conditions to emit a LAF-007
+            # The policy is enabled
+            policy.is_enabled("LAF-007") and
+            # Have the last uplink mic for this device session
+            device_session.id in last_uplink_mic and
+            (
+                # Received a counter smaller than the expected
+                (packet.f_count < device_session.up_link_counter) or
+                # Or equal but with a different mic
+                ((packet.f_count == device_session.up_link_counter) and (last_uplink_mic[device_session.id] != packet.mic))
+            ) and
+            # To avoid errors when the counter overflows
+            (packet.f_count > 5 or device_session.up_link_counter < 65530)
+            ) :
+                emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
+                            counter=device_session.up_link_counter,
+                            new_counter=packet.f_count,
+                            prev_packet_id=device_session.last_packet_id)
 
         last_uplink_mic[device_session.id]= packet.mic
 
