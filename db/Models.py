@@ -98,6 +98,10 @@ class Gateway(Base):
 
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=False)
+    activity_freq = Column(Float, nullable=True)
+    npackets_up = Column(Integer, nullable=True)
+    npackets_down = Column(Integer, nullable=True)
+    npackets_lost = Column(Integer, nullable=True)
 
     @classmethod
     def create_from_packet(cls, packet):
@@ -263,6 +267,9 @@ class Device(Base):
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
     activity_freq = Column(Float, nullable=True)
+    npackets_up = Column(Integer, nullable=True)
+    npackets_down = Column(Integer, nullable=True)
+    npackets_lost = Column(Integer, nullable=True)
 
     @classmethod
     def get(cls, id):
