@@ -3,7 +3,6 @@ from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice,
     DataCollectorToDeviceSession, DataCollectorToGateway, Packet, DataCollector
 from utils import emit_alert
 from utils import Chronometer
-from db import session
 
 
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
