@@ -275,8 +275,8 @@ if __name__ == '__main__':
                             default = None
                             )
         parser.add_argument("--hours",
-                            help = "[Bruteforcer] Hours between bruteforcing for each device. By default, there's no delay between bruteforcing.",
-                            default = 0,
+                            help = "[Bruteforcer] Hours between bruteforcing for each device.",
+                            default = 24,
                             type = int
                             )
         parser.add_argument("-p", "--parse",

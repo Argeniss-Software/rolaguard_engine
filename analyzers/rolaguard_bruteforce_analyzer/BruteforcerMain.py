@@ -48,7 +48,10 @@ def process_packet(packet, policy):
                     keys_to_test.append(bytes(pot_app_key.app_key_hex.rstrip().upper(), encoding='utf-8')) 
 
                 keys_to_test = list(dict.fromkeys(keys_to_test))
-                correct_app_keys = LorawanWrapper.testAppKeysWithJoinRequest(keys_to_test, packet.data, True).split()
+                correct_app_keys = LorawanWrapper.testAppKeysWithJoinRequest(
+                    keys_to_test,
+                    packet.data,
+                    dontGenerateKeys = True).split()
                 key_tested = True
 
                 if len(correct_app_keys) > 1:
@@ -112,14 +115,20 @@ def process_packet(packet, policy):
 
                 for hex_key in candidate_keys_array:
                     try:
-                        potential_key_obj = PotentialAppKey(
-                            app_key_hex = hex_key.upper(),
-                            organization_id = packet.organization_id,
-                            last_seen= packet.date,
-                            packet_id= packet.id,
-                            device_auth_data_id= device_auth_obj.id
+                        # Save the potential app key if it does not exists already in the DB
+                        potential_key_obj = PotentialAppKey.get_by_device_auth_data_and_hex_app_key(
+                            device_auth_data_id = device_auth_obj.id,
+                            hex_app_key = hex_key.upper()
                         )
-                        potential_key_obj.save()
+                        if not potential_key_obj:
+                            potential_key_obj = PotentialAppKey(
+                                app_key_hex = hex_key.upper(),
+                                organization_id = packet.organization_id,
+                                last_seen= packet.date,
+                                packet_id= packet.id,
+                                device_auth_data_id= device_auth_obj.id
+                            )
+                            potential_key_obj.save()
                     except Exception as exc:
                         logging.error("Error trying to save PotentialAppKey at JoinRequest: {0}".format(exc))           
         else:

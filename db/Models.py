@@ -138,7 +138,7 @@ class Gateway(Base):
 
     def update_state(self, packet):
         try:
-            if packet.latitude and packet.longitude and (packet.latitude > 0 or packet.longitude > 0):
+            if packet.latitude and packet.longitude:
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
             self.last_activity = packet.date
@@ -325,8 +325,12 @@ class DeviceVendorPrefix(Base):
 
     @classmethod
     def get_vendor_from_dev_eui(cls, dev_eui):
-        prefix = dev_eui[0:6]
-        row = session.query(cls).filter(cls.prefix == prefix).first()
+        row = session.query(cls).filter(cls.prefix == dev_eui[0:6].upper()).first()
+        if not row:
+            row = session.query(cls).filter(cls.prefix == dev_eui[0:7].upper()).first()
+        if not row:
+            row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
+
         try:
             return row.vendor
         except:
@@ -664,6 +668,12 @@ class PotentialAppKey(Base):
     def find_all_by_device_auth_id(cls, dev_auth_data_id):
         return session.query(cls).filter(cls.device_auth_data_id == dev_auth_data_id).all()
 
+    @classmethod
+    def get_by_device_auth_data_and_hex_app_key(cls, device_auth_data_id, app_key_hex):
+        return session.query(cls).filter(cls.device_auth_data_id == device_auth_data_id).\
+                                  filter(cls.app_key_hex == app_key_hex).first()
+
+
 
 class RowProcessed(Base):
     __tablename__ = 'row_processed'
@@ -959,7 +969,7 @@ class Quarantine(Base):
         qRec.resolved_by_id = user_id
         qRec.resolution_reason_id = reason.id
         qRec.resolution_comment = res_comment
-        qRec.db_update()
+        session.commit()
 
     @classmethod
     def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment):
@@ -968,7 +978,7 @@ class Quarantine(Base):
             qrec.resolved_at = datetime.now()
             qrec.resolution_reason_id = res_reason_id
             qrec.resolution_comment = res_comment
-            qrec.db_update()
+            session.commit()
 
 
 Base.metadata.create_all(engine)
