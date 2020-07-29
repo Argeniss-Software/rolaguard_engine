@@ -42,20 +42,21 @@ def process_packet(packet, policy):
 
             if len(pot_app_keys) > 0:
                 
-                keys_to_test=list()
-                
-                for pot_app_key in pot_app_keys:
-                    keys_to_test.append(bytes(pot_app_key.app_key_hex.rstrip().upper(), encoding='utf-8')) 
-
+                keys_to_test=[bytes(pk.app_key_hex.rstrip().upper(), encoding='utf-8') for pk in pot_app_keys] 
                 keys_to_test = list(dict.fromkeys(keys_to_test))
+
                 correct_app_keys = LorawanWrapper.testAppKeysWithJoinRequest(
                     keys_to_test,
                     packet.data,
                     dontGenerateKeys = True).split()
                 key_tested = True
 
+                pk_to_remove = [pk.upper() for pk in keys_to_test if pk not in correct_app_keys]
+                PotentialAppKey.delete_keys(device_auth_data_id=device_auth_obj.id, keys=pk_to_remove)
+
                 if len(correct_app_keys) > 1:
-                    logging.warning("Found more than one possible keys for the device {0}. One of them should be the correct. Check it manually. Keys: {1}".format(packet.dev_eui, correct_app_keys))
+                    logging.warning(f"Found more than one possible keys for the device {packet.dev_eui}." +
+                                    f" One of them should be the correct. Check it manually. Keys: {correct_app_keys}")
                 elif len(correct_app_keys) == 1:
                     # AppKey found!!
                     device_auth_obj.second_join_request_packet_id = packet.id
