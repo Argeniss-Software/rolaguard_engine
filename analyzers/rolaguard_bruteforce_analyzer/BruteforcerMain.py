@@ -49,9 +49,10 @@ def process_packet(packet, policy):
                     keys_to_test,
                     packet.data,
                     dontGenerateKeys = True).split()
+                correct_app_keys = [ak.upper().rstrip() for ak in correct_app_keys]
                 key_tested = True
 
-                pk_to_remove = [pk.upper() for pk in keys_to_test if pk not in correct_app_keys]
+                pk_to_remove = [pk for pk in keys_to_test if pk not in correct_app_keys]
                 PotentialAppKey.delete_keys(device_auth_data_id=device_auth_obj.id, keys=pk_to_remove)
 
                 if len(correct_app_keys) > 1:
