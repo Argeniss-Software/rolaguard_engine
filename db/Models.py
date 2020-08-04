@@ -669,6 +669,13 @@ class PotentialAppKey(Base):
         return session.query(cls).filter(cls.device_auth_data_id == dev_auth_data_id).all()
 
     @classmethod
+    def delete_keys(cls, device_auth_data_id, keys):
+        delete_query = cls.__table__.delete().\
+            where(cls.device_auth_data_id == device_auth_data_id).\
+            where(cls.app_key_hex.in_(keys))
+        session.execute(delete_query)
+
+    @classmethod
     def get_by_device_auth_data_and_hex_app_key(cls, device_auth_data_id, app_key_hex):
         return session.query(cls).filter(cls.device_auth_data_id == device_auth_data_id).\
                                   filter(cls.app_key_hex == app_key_hex).first()
