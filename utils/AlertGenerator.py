@@ -4,7 +4,7 @@ from db.Models import Alert, Quarantine, Gateway, GatewayToDevice, GatewayToDevi
 from mq.AlertEvent import emit_alert_event
 
 
-quarantined_alerts = ["LAF-002", "LAF-006", "LAF-007", "LAF-009"]
+quarantined_alerts = ["LAF-002", "LAF-006", "LAF-007", "LAF-009", "LAF-100", "LAF-101"]
 
 
 def emit_alert(alert_type, packet, device=None, device_session=None, gateway=None, device_auth_id=None, **custom_parameters):
