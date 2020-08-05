@@ -6,9 +6,10 @@ from utils import Chronometer
 from db import session
 
 
+# TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
-last_uplink_mic= {}
-
+last_uplink_mic = {}
+last_fcount = {}
 
 chrono = Chronometer(report_every=1000)
 
@@ -92,6 +93,34 @@ def process_packet(packet, policy):
                         old_longitude = gateway.location_longitude,
                         new_latitude = packet.latitude,
                         new_longitude = packet.longitude)
+
+    ## Check alert LAF-100
+    if (
+        packet.error is None and
+        packet.rssi and
+        packet.rssi < policy.get_parameters("LAF-100")["minimum_rssi"]
+    ):
+        emit_alert(
+            "LAF-100", packet,
+            device = device,
+            device_session = device_session,
+            gateway = gateway,
+            rssi = packet.rssi
+            )
+
+    ## Check alert LAF-101
+    if (device_session and packet.f_count):
+        if (device_session.id in last_fcount and packet.f_count > last_fcount[device_session.id]):
+            count_diff = (packet.f_count - last_fcount[device_session.id])
+            if count_diff > policy.get_parameters("LAF-101")["max_lost_packets"]:
+                emit_alert(
+                    "LAF-101", packet,
+                    device=device,
+                    device_session=device_session,
+                    gateway=gateway,
+                    packets_lost=count_diff
+                    )
+        last_fcount[device_session.id] = packet.f_count
 
     if packet.m_type == "JoinRequest":
         # Check if DevNonce is repeated and save it
