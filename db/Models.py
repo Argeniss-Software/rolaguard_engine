@@ -330,11 +330,7 @@ class DeviceVendorPrefix(Base):
             row = session.query(cls).filter(cls.prefix == dev_eui[0:7].upper()).first()
         if not row:
             row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
-
-        try:
-            return row.vendor
-        except:
-            return None
+        return row.vendor if row else None
 
 
 class DevNonce(Base):
