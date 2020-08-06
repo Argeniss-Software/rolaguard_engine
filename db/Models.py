@@ -145,8 +145,6 @@ class Gateway(Base):
             if packet.latitude and packet.longitude:
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
-            self.last_activity = packet.date
-            self.connected = True
         except Exception as exc:
             log.error(f"Error updating gateway {self.id}: {exc}")
 
@@ -317,8 +315,6 @@ class Device(Base):
             if packet.m_type == "JoinRequest":
                 self.join_request_counter += 1
                 self.is_otaa = True
-            self.last_activity = packet.date
-            self.connected = True
             self.last_packet_id = packet.id
         except Exception as exc:
             log.error(f"Error while updating device {self.dev_eui}: {exc}")
@@ -482,7 +478,6 @@ class DeviceSession(Base):
             if packet.f_count is not None:
                 self.up_link_counter = packet.f_count
             self.last_packet_id = packet.id
-        self.connected = True
         self.last_activity = packet.date
 
 
