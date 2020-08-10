@@ -72,7 +72,7 @@ class ResourceMeter():
         gateway.connected = True
 
         last_tmst = self.gateway_stats[gateway.id]["last_tmst"]
-        time_diff = (int(packet.tmst - last_tmst) % (2**32)) / 1e6
+        time_diff = (int(packet.tmst - last_tmst) % (2**32)) / 1e9
 
         if gateway.activity_freq:
             gateway.activity_freq = self.maw * gateway.activity_freq + (1-self.maw) * time_diff
