@@ -2,13 +2,14 @@ import re, datetime, os, sys, base64, json, logging, math, datetime as dt, loggi
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, DataCollectorToDevice, \
     DataCollectorToDeviceSession, DataCollectorToGateway, Packet, DataCollector
 from utils import emit_alert
+from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from utils import Chronometer
 
 
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
 last_uplink_mic = {}
-last_fcount = {}
+resource_meter = ResourceMeter()
 
 chrono = Chronometer(report_every=1000)
 
@@ -108,18 +109,18 @@ def process_packet(packet, policy):
             )
 
     ## Check alert LAF-101
-    if (device_session and packet.f_count):
-        if (device_session.id in last_fcount and packet.f_count > last_fcount[device_session.id]):
-            count_diff = (packet.f_count - last_fcount[device_session.id])
-            if count_diff > policy.get_parameters("LAF-101")["max_lost_packets"]:
-                emit_alert(
-                    "LAF-101", packet,
-                    device=device,
-                    device_session=device_session,
-                    gateway=gateway,
-                    packets_lost=count_diff
-                    )
-        last_fcount[device_session.id] = packet.f_count
+    # if (device_session and packet.f_count):
+    #     if (device_session.id in last_fcount and packet.f_count > last_fcount[device_session.id]):
+    #         count_diff = (packet.f_count - last_fcount[device_session.id])
+    #         if count_diff > policy.get_parameters("LAF-101")["max_lost_packets"]:
+    #             emit_alert(
+    #                 "LAF-101", packet,
+    #                 device=device,
+    #                 device_session=device_session,
+    #                 gateway=gateway,
+    #                 packets_lost=count_diff
+    #                 )
+    #     last_fcount[device_session.id] = packet.f_count
 
     if packet.m_type == "JoinRequest":
         # Check if DevNonce is repeated and save it
@@ -220,6 +221,9 @@ def process_packet(packet, policy):
     if gateway: gateway.update_state(packet)
     if device_session: device_session.update_state(packet)
     if device: device.update_state(packet)
+
+    resource_meter(device, packet)
+    resource_meter(gateway, packet)
 
     chrono.stop("total")
     chrono.lap()
