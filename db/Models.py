@@ -99,9 +99,8 @@ class Gateway(Base):
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=False)
     activity_freq = Column(Float, nullable=True)
-    npackets_up = Column(Integer, nullable=True)
-    npackets_down = Column(Integer, nullable=True)
-    npackets_lost = Column(Integer, nullable=True)
+    npackets_up = Column(Integer, nullable=False, default=0)
+    npackets_down = Column(Integer, nullable=False, default=0)
 
     @classmethod
     def create_from_packet(cls, packet):
@@ -265,9 +264,9 @@ class Device(Base):
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
     activity_freq = Column(Float, nullable=True)
-    npackets_up = Column(Integer, nullable=True)
-    npackets_down = Column(Integer, nullable=True)
-    npackets_lost = Column(Integer, nullable=True)
+    npackets_up = Column(Integer, nullable=False, default=0)
+    npackets_down = Column(Integer, nullable=False, default=0)
+    npackets_lost = Column(Float, nullable=False, default=0)
 
     @classmethod
     def get(cls, id):
@@ -283,7 +282,7 @@ class Device(Base):
             join_eui = packet.join_eui,
             organization_id = packet.organization_id,
             last_packet_id = packet.id,
-            connected = True,
+            connected = "Up" in packet.m_type,
             app_name = packet.app_name,
             last_activity = packet.date
             )
