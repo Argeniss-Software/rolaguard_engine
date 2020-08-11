@@ -94,34 +94,6 @@ def process_packet(packet, policy):
                         new_latitude = packet.latitude,
                         new_longitude = packet.longitude)
 
-    ## Check alert LAF-100
-    if (
-        packet.error is None and
-        packet.rssi and
-        packet.rssi < policy.get_parameters("LAF-100")["minimum_rssi"]
-    ):
-        emit_alert(
-            "LAF-100", packet,
-            device = device,
-            device_session = device_session,
-            gateway = gateway,
-            rssi = packet.rssi
-            )
-
-    ## Check alert LAF-101
-    # if (device_session and packet.f_count):
-    #     if (device_session.id in last_fcount and packet.f_count > last_fcount[device_session.id]):
-    #         count_diff = (packet.f_count - last_fcount[device_session.id])
-    #         if count_diff > policy.get_parameters("LAF-101")["max_lost_packets"]:
-    #             emit_alert(
-    #                 "LAF-101", packet,
-    #                 device=device,
-    #                 device_session=device_session,
-    #                 gateway=gateway,
-    #                 packets_lost=count_diff
-    #                 )
-    #     last_fcount[device_session.id] = packet.f_count
-
     if packet.m_type == "JoinRequest":
         # Check if DevNonce is repeated and save it
         prev_packet_id = DevNonce.saveIfNotExists(packet.dev_nonce, device.id, packet.id) 
@@ -225,6 +197,32 @@ def process_packet(packet, policy):
     resource_meter(device, packet)
     resource_meter(gateway, packet)
 
+    ## Check alert LAF-100
+    if (
+        device and device.max_rssi is not None and \
+        device.max_rssi < policy.get_parameters("LAF-100")["minimum_rssi"]
+    ):
+        emit_alert(
+            "LAF-100", packet,
+            device = device,
+            device_session = device_session,
+            gateway = gateway,
+            rssi = packet.rssi
+            )
+
+    ## Check alert LAF-101
+    if (
+        device and \
+        device.activity_freq is not None and device.npackets_lost is not None and \
+        device.activity_freq * device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
+    ):
+        emit_alert(
+            "LAF-101", packet,
+            device=device,
+            device_session=device_session,
+            gateway=gateway,
+            packets_lost=count_diff
+            )
     chrono.stop("total")
     chrono.lap()
 
