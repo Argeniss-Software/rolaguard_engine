@@ -267,6 +267,7 @@ class Device(Base):
     npackets_up = Column(Integer, nullable=False, default=0)
     npackets_down = Column(Integer, nullable=False, default=0)
     npackets_lost = Column(Float, nullable=False, default=0)
+    max_rssi = Column(Float, nullable=True)
 
     @classmethod
     def get(cls, id):
