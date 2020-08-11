@@ -99,7 +99,7 @@ class ResourceMeter():
             gateway.activity_freq = time_diff
 
     def gc(self, today):
-        if (date.today() - self.last_gc).minutes > 10:
+        if (date.today() - self.last_gc).seconds > 3600:
             todel = [k for k, v in self.device_stats.items() if (today - v['last_date']).days > 7]
             for k in todel: del self.device_stats[k]
             todel = [k for k, v in self.gateway_stats.items() if (today - v['last_date']).days > 7]

@@ -196,6 +196,7 @@ def process_packet(packet, policy):
 
     resource_meter(device, packet)
     resource_meter(gateway, packet)
+    resource_meter.gc(packet.date)
 
     ## Check alert LAF-100
     if (
