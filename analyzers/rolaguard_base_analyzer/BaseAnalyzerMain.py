@@ -2,13 +2,14 @@ import re, datetime, os, sys, base64, json, logging, math, datetime as dt, loggi
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, DataCollectorToDevice, \
     DataCollectorToDeviceSession, DataCollectorToGateway, Packet, DataCollector
 from utils import emit_alert
+from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from utils import Chronometer
-from db import session
 
 
+# TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
-last_uplink_mic= {}
-
+last_uplink_mic = {}
+resource_meter = ResourceMeter()
 
 chrono = Chronometer(report_every=1000)
 
@@ -193,6 +194,36 @@ def process_packet(packet, policy):
     if device_session: device_session.update_state(packet)
     if device: device.update_state(packet)
 
+    resource_meter(device, packet)
+    resource_meter(gateway, packet)
+    resource_meter.gc(packet.date)
+
+    ## Check alert LAF-100
+    if (
+        device and device.max_rssi is not None and \
+        device.max_rssi < policy.get_parameters("LAF-100")["minimum_rssi"]
+    ):
+        emit_alert(
+            "LAF-100", packet,
+            device = device,
+            device_session = device_session,
+            gateway = gateway,
+            rssi = packet.rssi
+            )
+
+    ## Check alert LAF-101
+    if (
+        device and \
+        device.activity_freq is not None and device.npackets_lost is not None and \
+        device.activity_freq * device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
+    ):
+        emit_alert(
+            "LAF-101", packet,
+            device=device,
+            device_session=device_session,
+            gateway=gateway,
+            packets_lost=count_diff
+            )
     chrono.stop("total")
     chrono.lap()
 

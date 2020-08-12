@@ -98,6 +98,9 @@ class Gateway(Base):
 
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=False)
+    activity_freq = Column(Float, nullable=True)
+    npackets_up = Column(Integer, nullable=False, default=0)
+    npackets_down = Column(Integer, nullable=False, default=0)
 
     @classmethod
     def create_from_packet(cls, packet):
@@ -141,8 +144,6 @@ class Gateway(Base):
             if packet.latitude and packet.longitude:
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
-            self.last_activity = packet.date
-            self.connected = True
         except Exception as exc:
             log.error(f"Error updating gateway {self.id}: {exc}")
 
@@ -263,6 +264,10 @@ class Device(Base):
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
     activity_freq = Column(Float, nullable=True)
+    npackets_up = Column(Integer, nullable=False, default=0)
+    npackets_down = Column(Integer, nullable=False, default=0)
+    npackets_lost = Column(Float, nullable=False, default=0)
+    max_rssi = Column(Float, nullable=True)
 
     @classmethod
     def get(cls, id):
@@ -278,7 +283,7 @@ class Device(Base):
             join_eui = packet.join_eui,
             organization_id = packet.organization_id,
             last_packet_id = packet.id,
-            connected = True,
+            connected = "Up" in packet.m_type,
             app_name = packet.app_name,
             last_activity = packet.date
             )
@@ -310,8 +315,6 @@ class Device(Base):
             if packet.m_type == "JoinRequest":
                 self.join_request_counter += 1
                 self.is_otaa = True
-            self.last_activity = packet.date
-            self.connected = True
             self.last_packet_id = packet.id
         except Exception as exc:
             log.error(f"Error while updating device {self.dev_eui}: {exc}")
@@ -330,11 +333,7 @@ class DeviceVendorPrefix(Base):
             row = session.query(cls).filter(cls.prefix == dev_eui[0:7].upper()).first()
         if not row:
             row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
-
-        try:
-            return row.vendor
-        except:
-            return None
+        return row.vendor if row else None
 
 
 class DevNonce(Base):
@@ -479,7 +478,6 @@ class DeviceSession(Base):
             if packet.f_count is not None:
                 self.up_link_counter = packet.f_count
             self.last_packet_id = packet.id
-        self.connected = True
         self.last_activity = packet.date
 
 
