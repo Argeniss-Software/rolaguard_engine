@@ -75,13 +75,13 @@ def process_packet(packet, policy):
 
     chrono.start("checks")
     ## Check alert LAF-400
-    if device and not device.connected and policy.is_enabled("LAF-400"):
-        emit_alert("LAF-400", packet, device=device, gateway=gateway,
-                    number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
+    # # if device and not device.connected and policy.is_enabled("LAF-400"):
+    # #     emit_alert("LAF-400", packet, device=device, gateway=gateway,
+    # #                 number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
 
-    ## Check alert LAF-402
-    if gateway and not gateway.connected and policy.is_enabled("LAF-402"):
-            emit_alert("LAF-402", packet, gateway = gateway)
+    # ## Check alert LAF-402
+    # if gateway and not gateway.connected and policy.is_enabled("LAF-402"):
+    #         emit_alert("LAF-402", packet, gateway = gateway)
 
     ## Check alert LAF-010
     if gateway and policy.is_enabled("LAF-010"):
