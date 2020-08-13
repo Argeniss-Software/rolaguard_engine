@@ -29,12 +29,12 @@ class ResourceMeter():
 
         if type(asset) == Device:
             if asset.id in self.device_stats:
-                self.device_resource_usage(asset, packet)
-                if packet.uplink:
-                    self.device_stats[asset.id]["last_fcount"] = packet.f_count
-                else:
-                    self.device_stats[asset.id]["last_fcount_down"] = packet.f_count
-                self.device_stats[asset.id]["last_date"] = packet.date
+                if self.device_resource_usage(asset, packet):
+                    if packet.uplink:
+                        self.device_stats[asset.id]["last_fcount"] = packet.f_count
+                    else:
+                        self.device_stats[asset.id]["last_fcount_down"] = packet.f_count
+                    self.device_stats[asset.id]["last_date"] = packet.date
             else:
                 self.device_stats[asset.id] = {
                     "last_fcount" : packet.f_count if packet.uplink else None,
@@ -70,7 +70,7 @@ class ResourceMeter():
             # The counter changed a lot, probably the session was restarted
             if count_diff > 64 or count_diff < 1:
                 del self.device_stats[device.id]
-                return
+                return False
 
             # Update activity_freq (which is the time between packets)
             time_diff = (packet.date - self.device_stats[device.id]["last_date"]).seconds / count_diff
@@ -93,6 +93,7 @@ class ResourceMeter():
             else:
                 self.device_stats[device.id]["rssi"][packet.gateway] = packet.rssi
             device.max_rssi = max(self.device_stats[device.id]["rssi"].values())
+        return True
 
 
     def gateway_resource_usage(self, gateway, packet):
