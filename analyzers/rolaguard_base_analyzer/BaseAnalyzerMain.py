@@ -215,7 +215,7 @@ def process_packet(packet, policy):
     if (
         device and \
         device.activity_freq is not None and device.npackets_lost is not None and \
-        device.activity_freq * device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
+        device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
     ):
         emit_alert(
             "LAF-101", packet,
