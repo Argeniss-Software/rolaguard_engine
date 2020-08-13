@@ -201,7 +201,8 @@ def process_packet(packet, policy):
     ## Check alert LAF-100
     if (
         device and device.max_rssi is not None and \
-        device.max_rssi < policy.get_parameters("LAF-100")["minimum_rssi"]
+        device.max_rssi < -120
+        # device.max_rssi < policy.get_parameters("LAF-100")["minimum_rssi"]
     ):
         emit_alert(
             "LAF-100", packet,
@@ -215,7 +216,8 @@ def process_packet(packet, policy):
     if (
         device and \
         device.activity_freq is not None and device.npackets_lost is not None and \
-        device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
+        device.npackets_lost > 20
+        # device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
     ):
         emit_alert(
             "LAF-101", packet,
