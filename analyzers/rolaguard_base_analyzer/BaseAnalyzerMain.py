@@ -74,6 +74,7 @@ def process_packet(packet, policy):
 
 
     chrono.start("checks")
+    # TODO: should a LAF-400 be emitted when a device reconnects? 
     ## Check alert LAF-400
     # # if device and not device.connected and policy.is_enabled("LAF-400"):
     # #     emit_alert("LAF-400", packet, device=device, gateway=gateway,
