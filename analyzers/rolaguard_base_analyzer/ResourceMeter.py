@@ -40,8 +40,10 @@ class ResourceMeter():
                     "last_fcount" : packet.f_count if packet.uplink else None,
                     "last_fcount_down" : packet.f_count if not packet.uplink else None,
                     "last_date" : packet.date,
-                    "rssi" : {packet.gateway : packet.rssi}
+                    "rssi" : {}
                 }
+                if packet.rssi is not None:
+                    self.device_stats[packet.gateway] = packet.rssi
         if type(asset) == Gateway:
             if asset.id in self.gateway_stats:
                 self.gateway_resource_usage(asset, packet)
@@ -86,13 +88,17 @@ class ResourceMeter():
                 device.npackets_lost = count_diff-1
 
             # Update the max (from all the gateways) rssi of the device
-            if packet.gateway in self.device_stats[device.id]["rssi"]:
-                self.device_stats[device.id]["rssi"][packet.gateway] = \
-                    self.maw *  self.device_stats[device.id]["rssi"][packet.gateway] + \
-                    (1 - self.maw) * packet.rssi
-            else:
-                self.device_stats[device.id]["rssi"][packet.gateway] = packet.rssi
-            device.max_rssi = max(self.device_stats[device.id]["rssi"].values())
+            if packet.rssi is not None:
+                if packet.gateway in self.device_stats[device.id]["rssi"]:
+                    self.device_stats[device.id]["rssi"][packet.gateway] = \
+                        self.maw *  self.device_stats[device.id]["rssi"][packet.gateway] + \
+                        (1 - self.maw) * packet.rssi
+                else:
+                    self.device_stats[device.id]["rssi"][packet.gateway] = packet.rssi
+
+            try:
+                device.max_rssi = max(self.device_stats[device.id]["rssi"].values())
+            except: pass
         return True
 
 
