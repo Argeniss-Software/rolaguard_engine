@@ -112,7 +112,7 @@ class DeviceIdentifier():
 
         # All registered JRs from the predicted device are deleted, since it is probabily linked to a session.
         self.del_jrs_with(data_collector_id=packet.data_collector_id, dev_eui=predicted_dev_eui)
-        try: # Tries to unlink the device and the session (if any)
+        try: # Tries to link the device and the session (could fail if they were not instantiated)
             self.link_device_session(
                 dev_eui = predicted_dev_eui,
                 dev_addr = packet.dev_addr,
