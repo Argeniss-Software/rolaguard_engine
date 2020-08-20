@@ -457,12 +457,15 @@ class DeviceSession(Base):
         )
 
     @classmethod
-    def find_with(cls, dev_addr, data_collector_id):
+    def find_with(cls, dev_addr=None, data_collector_id=None, device_id=None):
         if dev_addr and data_collector_id:
             return session.query(cls).\
                 filter(cls.dev_addr == dev_addr).\
                 join(DataCollectorToDeviceSession).\
                 filter(DataCollectorToDeviceSession.data_collector_id == data_collector_id).first()
+        elif device_id:
+            return session.query(cls).\
+                filter(cls.device_id == device_id).first()
         else:
             return None
 
