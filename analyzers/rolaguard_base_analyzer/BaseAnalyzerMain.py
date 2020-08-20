@@ -3,6 +3,7 @@ from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice,
     DataCollectorToDeviceSession, DataCollectorToGateway, Packet, DataCollector
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
+from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from utils import Chronometer
 
 
@@ -10,11 +11,13 @@ from utils import Chronometer
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
 last_uplink_mic = {}
 resource_meter = ResourceMeter()
+device_identifier = DeviceIdentifier()
 
 chrono = Chronometer(report_every=1000)
 
 def process_packet(packet, policy):
     chrono.start("total")
+    packet = device_identifier(packet)
 
     chrono.start("instantiation")
     ## Gateway instantiation
@@ -74,6 +77,7 @@ def process_packet(packet, policy):
 
 
     chrono.start("checks")
+    # TODO: should a LAF-400 be emitted when a device reconnects? 
     ## Check alert LAF-400
     # # if device and not device.connected and policy.is_enabled("LAF-400"):
     # #     emit_alert("LAF-400", packet, device=device, gateway=gateway,
