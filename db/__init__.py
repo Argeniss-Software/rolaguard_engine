@@ -11,11 +11,6 @@ DB_PORT = os.environ["DB_PORT"]
 
 engine = create_engine(f'postgresql+psycopg2://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}', echo='SA_ECHO' in os.environ)
 
-# If you'd like to use sqlite <---
-# Uncomment these lines if you want to work with sqlite instead of postgres
-# engine = create_engine('sqlite:///orm_in_detail.sqlite')
-# os.environ["ENVIRONMENT"] = "DEV"
-
 Base = declarative_base()
 sessionBuilder = sessionmaker(autoflush=False)
 sessionBuilder.configure(bind=engine)
