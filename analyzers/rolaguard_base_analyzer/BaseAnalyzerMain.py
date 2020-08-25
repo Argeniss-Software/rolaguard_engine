@@ -1,6 +1,6 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
-from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, DataCollectorToDevice, \
-    DataCollectorToDeviceSession, DataCollectorToGateway, Packet, DataCollector
+from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
+    Packet, DataCollector
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
@@ -25,7 +25,6 @@ def process_packet(packet, policy):
     if gateway is None and packet.gateway:
         gateway = Gateway.create_from_packet(packet)
         gateway.save()
-        DataCollectorToGateway.associate(packet.data_collector_id, gateway.id)
         emit_alert("LAF-402", packet, gateway = gateway)
 
     ## Session instantiation
@@ -33,14 +32,12 @@ def process_packet(packet, policy):
     if device_session is None and packet.dev_addr:
         device_session = DeviceSession.create_from_packet(packet)
         device_session.save()
-        DataCollectorToDeviceSession.associate(packet.data_collector_id, device_session.id)
 
     ## Device instantiation
     device = Device.find_with(dev_eui = packet.dev_eui, data_collector_id = packet.data_collector_id)
     if device is None and packet.dev_eui:
         device = Device.create_from_packet(packet)
         device.save()
-        DataCollectorToDevice.associate(packet.data_collector_id, device.id)
         if policy.is_enabled("LAF-400"):
             emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
                         number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))

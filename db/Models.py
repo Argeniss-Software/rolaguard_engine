@@ -122,8 +122,8 @@ class Gateway(Base):
         if gw_hex_id and data_collector_id:
             return session.query(Gateway).\
                 filter(Gateway.gw_hex_id == gw_hex_id).\
-                join(DataCollectorToGateway).\
-                filter(DataCollectorToGateway.data_collector_id == data_collector_id).first()
+                filter(Gateway.data_collector_id == data_collector_id).\
+                first()
         else:
             return None
 
@@ -210,13 +210,11 @@ class DataCollector(Base):
 
     @classmethod
     def number_of_devices(cls, data_collector_id):
-        collector_devices = session.query(DataCollectorToDevice.device_id).\
-                        filter(DataCollectorToDevice.data_collector_id == data_collector_id).subquery()
-        query = session.query(Device.dev_eui).\
+        ndev = session.query(Device.dev_eui).\
                 filter(Device.connected).\
-                filter(Device.id.in_(collector_devices)).\
-                distinct()
-        return query.count()
+                filter(Device.data_collector_id == data_collector_id).\
+                distinct().count()
+        return ndev
 
     def save(self):
         session.add(self)
@@ -252,6 +250,7 @@ class Device(Base):
     app_name = Column(String, nullable=True)
     join_eui = Column(String(16), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
+    data_collector_id = Column(BigInteger, ForeignKey("data_collector.id"), nullable=False)
     
     repeated_dev_nonce = Column(Boolean, nullable=True)
     join_request_counter = Column(Integer, nullable=False, default=0)
@@ -285,16 +284,16 @@ class Device(Base):
             last_packet_id = packet.id,
             connected = "Up" in packet.m_type,
             app_name = packet.app_name,
-            last_activity = packet.date
+            last_activity = packet.date,
+            data_collector_id = packet.data_collector_id
             )
 
     @classmethod
     def find_with(cls, dev_eui, data_collector_id):
         if dev_eui and data_collector_id:
             return session.query(cls).\
-                filter(cls.dev_eui == dev_eui).\
-                join(DataCollectorToDevice).\
-                filter(DataCollectorToDevice.data_collector_id == data_collector_id).first()
+                filter(Device.dev_eui == dev_eui).\
+                filter(Device.data_collector_id == data_collector_id).first()
         else:
             return None
 
@@ -435,6 +434,7 @@ class DeviceSession(Base):
 
     device_id = Column(BigIntegerType, ForeignKey("device.id"), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
+    data_collector_id = Column(BigInteger, ForeignKey("data_collector.id"), nullable=False)
     device_auth_data_id = Column(BigIntegerType, ForeignKey("device_auth_data.id"), nullable=True)
     # This is the last uplink packet ID
     last_packet_id = Column(BigIntegerType, ForeignKey("packet.id"), nullable=True)
@@ -453,7 +453,8 @@ class DeviceSession(Base):
             up_link_counter = 0,
             organization_id = packet.organization_id,
             connected = True,
-            last_activity = packet.date
+            last_activity = packet.date,
+            data_collector_id = packet.data_collector_id
         )
 
     @classmethod
@@ -461,8 +462,7 @@ class DeviceSession(Base):
         if dev_addr and data_collector_id:
             return session.query(cls).\
                 filter(cls.dev_addr == dev_addr).\
-                join(DataCollectorToDeviceSession).\
-                filter(DataCollectorToDeviceSession.data_collector_id == data_collector_id).first()
+                filter(cls.data_collector_id == data_collector_id).first()
         elif device_id:
             return session.query(cls).\
                 filter(cls.device_id == device_id).first()
@@ -715,76 +715,6 @@ class RowProcessed(Base):
     def save_and_flush(self):
         session.add(self)
         session.flush()
-
-
-class DataCollectorToGateway(Base):
-    __tablename__ = 'data_collector_to_gateway'
-    data_collector_id = Column(BigIntegerType, ForeignKey("data_collector.id"), nullable=False, primary_key=True)
-    gateway_id = Column(BigIntegerType, ForeignKey("gateway.id"), nullable=False, primary_key=True)
-
-    @classmethod
-    def associate(cls, data_collector_id, gateway_id):
-        try:
-            row = session.query(cls).\
-                filter(cls.data_collector_id == data_collector_id).\
-                filter(cls.gateway_id == gateway_id).first()
-            if row is None:
-                row = cls(
-                    data_collector_id = data_collector_id,
-                    gateway_id = gateway_id
-                )
-                session.add(row)
-                session.commit()
-        except Exception as exc:
-            session.rollback()
-            log.error(f"Error trying to add DataCollectorToGateway: {exc}")
-
-
-class DataCollectorToDevice(Base):
-    __tablename__ = 'data_collector_to_device'
-    data_collector_id = Column(BigIntegerType, ForeignKey("data_collector.id"), nullable=False, primary_key=True)
-    device_id = Column(BigIntegerType, ForeignKey("device.id"), nullable=False, primary_key=True)
-
-    @classmethod
-    def associate(cls, data_collector_id, device_id):
-        try:
-            row = session.query(cls).\
-                filter(cls.data_collector_id == data_collector_id).\
-                filter(cls.device_id == device_id).first()
-            if row is None:
-                row = cls(
-                    data_collector_id = data_collector_id,
-                    device_id = device_id
-                )
-                session.add(row)
-                session.commit()
-        except Exception as exc:
-            session.rollback()
-            log.error(f"Error trying to add DataCollectorToDevice: {exc}")
-
-
-
-class DataCollectorToDeviceSession(Base):
-    __tablename__ = 'data_collector_to_device_session'
-    data_collector_id = Column(BigIntegerType, ForeignKey("data_collector.id"), nullable=False, primary_key=True)
-    device_session_id = Column(BigIntegerType, ForeignKey("device_session.id"), nullable=False, primary_key=True)
-
-    @classmethod
-    def associate(cls, data_collector_id, device_session_id):
-        try:
-            row = session.query(cls).\
-                filter(cls.data_collector_id == data_collector_id).\
-                filter(cls.device_session_id == device_session_id).first()
-            if row is None:
-                row = cls(
-                    data_collector_id = data_collector_id,
-                    device_session_id = device_session_id
-                )
-                session.add(row)
-                session.commit()
-        except Exception as exc:
-            session.rollback()
-            log.error(f"Error trying to add DataCollectorToDeviceSession: {exc}")
 
 
 class Organization(Base):

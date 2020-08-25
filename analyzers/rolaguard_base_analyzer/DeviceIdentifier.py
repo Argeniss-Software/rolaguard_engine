@@ -67,7 +67,7 @@ class DeviceIdentifier():
         """
         Guess the dev_eui using the rssi, lsnr, gateway and machine learning.
         """
-        if packet.f_count > 4:
+        if packet.f_count is None or packet.f_count > 4:
             # The data packet has a high counter, the JR was missed.
             return packet
         if packet.rssi is None or packet.lsnr is None:
