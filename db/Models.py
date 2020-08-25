@@ -678,7 +678,15 @@ class PotentialAppKey(Base):
         return session.query(cls).filter(cls.device_auth_data_id == device_auth_data_id).\
                                   filter(cls.app_key_hex == app_key_hex).first()
 
+class AppKey(Base):
+    __tablename__ = 'app_key'
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    key = Column(String(32), nullable=False)
+    organization_id = Column(BigInteger, ForeignKey("organization.id"), nullable=True)
 
+    @classmethod
+    def get_with(cls, organization_id):
+        return session.query(cls).filter(cls.organization_id == organization_id)
 
 class RowProcessed(Base):
     __tablename__ = 'row_processed'

@@ -1,7 +1,7 @@
 import json, datetime, logging, os
 from analyzers.rolaguard_bruteforce_analyzer.lorawanwrapper import LorawanWrapper 
 from utils import emit_alert
-from db.Models import Device, DeviceAuthData, PotentialAppKey, Quarantine, AlertType
+from db.Models import Device, DeviceAuthData, PotentialAppKey, Quarantine, AlertType, AppKey
 
 
 device_auth_obj = None
@@ -52,7 +52,7 @@ def process_packet(packet, policy):
                 correct_app_keys = [ak.upper().rstrip() for ak in correct_app_keys]
                 key_tested = True
 
-                pk_to_remove = [pk for pk in keys_to_test if pk not in correct_app_keys]
+                pk_to_remove = [pk.hex().upper() for pk in keys_to_test if pk.hex().upper() not in correct_app_keys]
                 PotentialAppKey.delete_keys(device_auth_data_id=device_auth_obj.id, keys=pk_to_remove)
 
                 if len(correct_app_keys) > 1:
@@ -92,7 +92,8 @@ def process_packet(packet, policy):
                 logging.error("Error trying to save DeviceAuthData at JoinRequest: {0}".format(exc))
         
         # Check when was the last time it was bruteforced and 
-        # Try checking with the keys dictionary and the keys generated on the fly
+        # Try checking with the keys dictionary, the keys generated on the fly
+        # and the keys uploaded by the corresponding organization
         today = datetime.datetime.now()
         device_auth_obj.created_at = device_auth_obj.created_at.replace(tzinfo=None)
         
@@ -101,9 +102,14 @@ def process_packet(packet, policy):
         if elapsed.seconds > 3600 * hours_betweeen_bruteforce_trials or never_bruteforced:
             
             result = LorawanWrapper.testAppKeysWithJoinRequest(keys, packet.data, dontGenerateKeys)
+            organization_keys = [bytes(app_key.key.upper(), encoding='utf-8') for app_key in AppKey.get_with(organization_id = packet.organization_id)]
+            result_org_keys = LorawanWrapper.testAppKeysWithJoinRequest(organization_keys, packet.data, dontGenerateKeys = True)
+            if result_org_keys != "":
+                result += " " + result_org_keys
+
             key_tested = True
 
-            # Update the last time it was broteforced
+            # Update the last time it was bruteforced
             device_auth_obj.created_at= datetime.datetime.now()
 
             # If potential keys found...
@@ -113,14 +119,14 @@ def process_packet(packet, policy):
                 device_auth_obj.join_request= packet.data
 
                 # Split string possibly containing keys separated by spaces
-                candidate_keys_array= result.split()
+                candidate_keys_array= set(result.split())
 
                 for hex_key in candidate_keys_array:
                     try:
                         # Save the potential app key if it does not exists already in the DB
                         potential_key_obj = PotentialAppKey.get_by_device_auth_data_and_hex_app_key(
                             device_auth_data_id = device_auth_obj.id,
-                            hex_app_key = hex_key.upper()
+                            app_key_hex = hex_key.upper()
                         )
                         if not potential_key_obj:
                             potential_key_obj = PotentialAppKey(
