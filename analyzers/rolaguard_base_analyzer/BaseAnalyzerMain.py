@@ -17,30 +17,36 @@ chrono = Chronometer(report_every=1000)
 
 def process_packet(packet, policy):
     chrono.start("total")
+
+    chrono.start("dev id")
     packet = device_identifier(packet)
+    chrono.stop()
+
+    chrono.start("search objs")
+    gateway = Gateway.find_with(gw_hex_id = packet.gateway, data_collector_id = packet.data_collector_id)
+    device = Device.find_with(dev_eui = packet.dev_eui, data_collector_id = packet.data_collector_id)
+    device_session = DeviceSession.find_with(dev_addr = packet.dev_addr, data_collector_id = packet.data_collector_id)
+    chrono.stop()
 
     chrono.start("instantiation")
     ## Gateway instantiation
-    gateway = Gateway.find_with(gw_hex_id = packet.gateway, data_collector_id = packet.data_collector_id)
     if gateway is None and packet.gateway:
         gateway = Gateway.create_from_packet(packet)
         gateway.save()
         emit_alert("LAF-402", packet, gateway = gateway)
 
     ## Session instantiation
-    device_session = DeviceSession.find_with(dev_addr = packet.dev_addr, data_collector_id = packet.data_collector_id)
     if device_session is None and packet.dev_addr:
         device_session = DeviceSession.create_from_packet(packet)
         device_session.save()
 
-    ## Device instantiation
-    device = Device.find_with(dev_eui = packet.dev_eui, data_collector_id = packet.data_collector_id)
-    if device is None and packet.dev_eui:
-        device = Device.create_from_packet(packet)
-        device.save()
-        if policy.is_enabled("LAF-400"):
-            emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
-                        number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
+        ## Device instantiation (only with data packets)
+        if device is None and packet.dev_eui:
+            device = Device.create_from_packet(packet)
+            device.save()
+            if policy.is_enabled("LAF-400"):
+                emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
+                            number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
     chrono.stop()
 
     ## Associations
