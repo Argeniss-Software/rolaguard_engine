@@ -1,4 +1,5 @@
 import math
+import json
 import logging as log
 from sqlalchemy import Column, DateTime, String, Integer, BigInteger, SmallInteger, Float, Boolean, Interval,\
                        ForeignKey, func, asc, desc, func, LargeBinary, or_, Enum as SQLEnum
@@ -761,6 +762,18 @@ class Policy(Base):
     organization_id = Column(BigInteger, ForeignKey("organization.id"), nullable=True)
     is_default = Column(Boolean, nullable=False)
     data_collectors = relationship("DataCollector", lazy="joined")
+
+    def add_missing_item(self, alert_type_code):
+        alert_type = AlertType.find_one_by_code(alert_type_code)
+        parameters = json.loads(alert_type.parameters)
+        parameters = {par : val['default'] for par, val in parameters.items()}
+
+        session.add(PolicyItem(
+            policy_id=self.id,
+            alert_type_code=alert_type.code,
+            enabled=True,
+            parameters=json.dumps(parameters)))
+        session.commit()
 
     @classmethod
     def find(cls, organization_id=None):

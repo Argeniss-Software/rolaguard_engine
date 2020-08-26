@@ -44,16 +44,20 @@ class PolicyManager():
 
     def get_parameters(self, alert_type):
         try:
-            for item in self.active_policy.items:
-                if item.alert_type_code == alert_type:
-                    parameters = json.loads(item.alert_type.parameters)
-                    parameters = {par : val['default'] for par, val in parameters.items()}
+            for i in range(0,2):
 
-                    custom_parameters = json.loads(item.parameters)
-                    custom_parameters = {par : val for par, val in custom_parameters.items() if val is not None}
+                for item in self.active_policy.items:
+                    if item.alert_type_code == alert_type:
+                        parameters = json.loads(item.parameters)
+                        parameters = {par : val for par, val in parameters.items()}
+                        return parameters
 
-                    parameters.update(custom_parameters)
-                    return parameters
+                if i == 1:
+                    raise Exception(f'Couldn\'t find item for alert type {alert_type} when trying again')
+
+                # If no item found for this alert_type, add it with default values and try again
+                self.active_policy.add_missing_item(alert_type)
+
         except Exception as exc:
             log.error(f"Error getting parameters of alert {alert_type}. Exception: {exc}")
         return {}
