@@ -87,17 +87,17 @@ def process_packet(packet, policy):
 
     ## LAF-404
     # The data_collector and dev_eui is used as UID to count JRs.
-    jr_count = jr_counters[(packet.data_collector_id, packet.dev_eui)]
-    if packet.m_type == 'JoinRequest':
-        jr_count += 1
-    else:
-        jr_count = 0
+    if packet.dev_eui:
+        if packet.m_type == 'JoinRequest':
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] += 1
+        else:
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] = 0
 
-    if (
-        policy.is_enabled("LAF-404") and
-        jr_count > policy.get_parameters("LAF-404")["max_join_request_fails"]
-    ):
-        emit_alert("LAF-404", packet, device=device, gateway=gateway)
+        if (
+            policy.is_enabled("LAF-404") and
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] > policy.get_parameters("LAF-404")["max_join_request_fails"]
+        ):
+            emit_alert("LAF-404", packet, device=device, gateway=gateway)
     
 
     ## Check alert LAF-010
