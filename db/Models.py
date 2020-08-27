@@ -749,6 +749,9 @@ class PolicyItem(Base):
     alert_type_code = Column(String(20), ForeignKey("alert_type.code"), nullable=False)
     alert_type = relationship("AlertType", lazy="joined")
 
+    def db_update(self):
+        session.commit()
+
     @classmethod
     def find_one(cls, id):
         return session.query(cls).get(id)
@@ -764,6 +767,11 @@ class Policy(Base):
     data_collectors = relationship("DataCollector", lazy="joined")
 
     def add_missing_item(self, alert_type_code):
+        """
+        Add new policy item, with default parameters, 
+        for this policy and this alert type.
+        Returns the corresponding default parameters.
+        """
         alert_type = AlertType.find_one_by_code(alert_type_code)
         parameters = json.loads(alert_type.parameters)
         parameters = {par : val['default'] for par, val in parameters.items()}
@@ -774,6 +782,7 @@ class Policy(Base):
             enabled=True,
             parameters=json.dumps(parameters)))
         session.commit()
+        return parameters
 
     @classmethod
     def find(cls, organization_id=None):
