@@ -1,6 +1,6 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector
+    Packet, DataCollector, Quarantine
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
@@ -47,6 +47,15 @@ def process_packet(packet, policy):
             if policy.is_enabled("LAF-400"):
                 emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
                             number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
+        
+        Quarantine.remove_from_quarantine(
+            "LAF-404",
+            device_id = device.id,
+            device_session_id = device_session.id,
+            data_collector_id = packet.data_collector_id,
+            res_reason_id = 3,
+            res_comment = "Device connected"
+            )
     chrono.stop()
 
     ## Associations
