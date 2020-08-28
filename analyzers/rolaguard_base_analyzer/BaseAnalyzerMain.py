@@ -1,4 +1,5 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
+from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
     Packet, DataCollector, Quarantine
 from utils import emit_alert
@@ -10,6 +11,8 @@ from utils import Chronometer
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
 last_uplink_mic = {}
+jr_counters = defaultdict(lambda: 0)
+
 resource_meter = ResourceMeter()
 device_identifier = DeviceIdentifier()
 
@@ -89,15 +92,22 @@ def process_packet(packet, policy):
 
 
     chrono.start("checks")
-    # TODO: should a LAF-400 be emitted when a device reconnects? 
-    ## Check alert LAF-400
-    # # if device and not device.connected and policy.is_enabled("LAF-400"):
-    # #     emit_alert("LAF-400", packet, device=device, gateway=gateway,
-    # #                 number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
+    ## Check alert
 
-    # ## Check alert LAF-402
-    # if gateway and not gateway.connected and policy.is_enabled("LAF-402"):
-    #         emit_alert("LAF-402", packet, gateway = gateway)
+    ## LAF-404
+    # The data_collector and dev_eui is used as UID to count JRs.
+    if packet.dev_eui:
+        if packet.m_type == 'JoinRequest':
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] += 1
+        else:
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] = 0
+
+        if (
+            policy.is_enabled("LAF-404") and
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] > policy.get_parameters("LAF-404")["max_join_request_fails"]
+        ):
+            emit_alert("LAF-404", packet, device=device, gateway=gateway)
+    
 
     ## Check alert LAF-010
     if gateway and policy.is_enabled("LAF-010"):
@@ -110,7 +120,7 @@ def process_packet(packet, policy):
                         new_latitude = packet.latitude,
                         new_longitude = packet.longitude)
 
-    if packet.m_type == "JoinRequest":
+    if packet.m_type == "JoinRequest" and device:
         # Check if DevNonce is repeated and save it
         prev_packet_id = DevNonce.saveIfNotExists(packet.dev_nonce, device.id, packet.id) 
         if prev_packet_id and (device.has_joined or device.join_inferred):

@@ -15,6 +15,7 @@ alert_blocked_by = {
     "LAF-501" : ["LAF-501", "LAF-404"]
 }
 
+
 def emit_alert(alert_type, packet, device=None, device_session=None, gateway=None, device_auth_id=None, **custom_parameters):
     try:
         if gateway is None:
