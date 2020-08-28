@@ -4,7 +4,16 @@ from db.Models import Alert, Quarantine, Gateway, GatewayToDevice, GatewayToDevi
 from mq.AlertEvent import emit_alert_event
 
 
-quarantined_alerts = ["LAF-002", "LAF-006", "LAF-007", "LAF-009", "LAF-100", "LAF-101", "LAF-404"]
+alert_blocked_by = {
+    "LAF-002" : ["LAF-002"],
+    "LAF-006" : ["LAF-006"],
+    "LAF-007" : ["LAF-007"], 
+    "LAF-009" : ["LAF-009"],
+    "LAF-100" : ["LAF-100"],
+    "LAF-101" : ["LAF-101"],
+    "LAF-404" : ["LAF-404"],
+    "LAF-501" : ["LAF-501", "LAF-404"]
+}
 
 
 def emit_alert(alert_type, packet, device=None, device_session=None, gateway=None, device_auth_id=None, **custom_parameters):
@@ -35,14 +44,19 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
 
         parameters.update(custom_parameters)
 
-        quarantine_row = None
-        if alert_type in quarantined_alerts:
-            quarantine_row = Quarantine.find_open_by_type_dev_coll(alert_type,
-                                                                   device.id if device else None,
-                                                                   device_session.id if device_session else None,
-                                                                   packet.data_collector_id)
-        on_quarantine = quarantine_row is not None   
-
+        issue = None
+        blocked = False
+        for blocking_issue in alert_blocked_by[alert_type]:
+            issue = Quarantine.find_open_by_type_dev_coll(
+                blocking_issue,
+                device.id if device else None,
+                device_session.id if device_session else None,
+                packet.data_collector_id
+            )
+            if issue:
+                blocked = True
+                break
+                                                        
         alert = Alert(
             type = alert_type,
             device_id = device.id if device and device.id else None,
@@ -53,12 +67,12 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
             created_at = now,
             packet_id = packet.id,
             parameters= json.dumps(parameters),
-            show = not on_quarantine)
+            show = not blocked)
         alert.save()
   
         # ReportAlert.print_alert(alert)
 
-        if not on_quarantine:
+        if not blocked:
             params = {
                 'data_collector_id': packet.data_collector_id,
                 'organization_id': packet.organization_id,
@@ -67,8 +81,9 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
             }
             emit_alert_event('NEW', params)
 
-        if alert_type in quarantined_alerts:
-            Quarantine.put_on_quarantine(alert=alert, quarantine_row=quarantine_row)
+        is_an_issue = any([alert_type in l for l in alert_blocked_by.values()])
+        if is_an_issue:
+            Quarantine.put_on_quarantine(alert=alert, quarantine_row=issue)
 
     except Exception as exc:
         logging.error(f"Error trying to emit alert {alert_type}: {exc}")
