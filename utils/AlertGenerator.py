@@ -11,6 +11,7 @@ alert_blocked_by = {
     "LAF-009" : ["LAF-009"],
     "LAF-100" : ["LAF-100"],
     "LAF-101" : ["LAF-101"],
+    "LAF-404" : ["LAF-404"],
     "LAF-501" : ["LAF-501", "LAF-404"]
 }
 
