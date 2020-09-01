@@ -1,7 +1,7 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
 from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Quarantine
+    Packet, DataCollector, Quarantine, DeviceVendorPrefix
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
@@ -107,7 +107,14 @@ def process_packet(packet, policy):
             policy.is_enabled("LAF-404") and
             jr_counters[(packet.data_collector_id, packet.dev_eui)] > policy.get_parameters("LAF-404")["max_join_request_fails"]
         ):
-            emit_alert("LAF-404", packet, device=device, gateway=gateway)
+            if device:
+                emit_alert("LAF-404", packet, device=device, gateway=gateway)
+            else:
+                emit_alert("LAF-404", packet, gateway=gateway,
+                    dev_eui = packet.dev_eui,
+                    dev_name = packet.dev_name,
+                    vendor = DeviceVendorPrefix.get_vendor_from_dev_eui(packet.dev_eui)
+                    )
     
 
     ## Check alert LAF-010
