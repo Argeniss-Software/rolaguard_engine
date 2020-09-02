@@ -1,6 +1,6 @@
 import datetime, os, json, logging 
 from db.Models import Alert, Quarantine, Gateway, GatewayToDevice, GatewayToDeviceSession, Device, \
-    DeviceSession, AlertType, DataCollector
+    DeviceSession, AlertType, DataCollector, Packet
 from mq.AlertEvent import emit_alert_event
 
 
@@ -33,6 +33,7 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
         parameters = {}
         parameters['packet_id'] = packet.id
         parameters['packet_date'] = packet.date.strftime('%Y-%m-%d %H:%M:%S')
+        parameters['packet_data'] = packet.to_json()
         parameters['created_at'] = now
         parameters['dev_eui'] = device.dev_eui if device and device.dev_eui else None
         parameters['dev_name'] = device.name if device and device.name else None
@@ -43,6 +44,11 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
         parameters['gw_vendor'] = gateway.vendor if gateway and gateway.vendor else None
 
         parameters.update(custom_parameters)
+
+        if 'prev_packet_id' in custom_parameters:
+            prev_packet = Packet.find_one(custom_parameters['prev_packet_id'])
+            if prev_packet:
+                parameters['prev_packet_data'] = prev_packet.to_json()
 
         issue = None
         blocked = False
