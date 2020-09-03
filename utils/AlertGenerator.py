@@ -50,18 +50,20 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
             if prev_packet:
                 parameters['prev_packet_data'] = prev_packet.to_json()
 
+        global alert_blocked_by
         issue = None
         blocked = False
-        for blocking_issue in alert_blocked_by[alert_type]:
-            issue = Quarantine.find_open_by_type_dev_coll(
-                blocking_issue,
-                device.id if device else None,
-                device_session.id if device_session else None,
-                packet.data_collector_id
-            )
-            if issue:
-                blocked = True
-                break
+        if alert_type in alert_blocked_by:
+            for blocking_issue in alert_blocked_by[alert_type]:
+                issue = Quarantine.find_open_by_type_dev_coll(
+                    blocking_issue,
+                    device.id if device else None,
+                    device_session.id if device_session else None,
+                    packet.data_collector_id
+                )
+                if issue:
+                    blocked = True
+                    break
                                                         
         alert = Alert(
             type = alert_type,
