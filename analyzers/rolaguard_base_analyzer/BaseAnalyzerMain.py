@@ -216,10 +216,10 @@ def process_packet(packet, policy):
             # Disable this alert for TTN collectors
             not DataCollector.get(packet.data_collector_id).is_ttn()
             ) :
-                    emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
-                                counter=device_session.up_link_counter,
-                                new_counter=packet.f_count,
-                                prev_packet_id=device_session.last_packet_id)
+                emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
+                            counter=device_session.up_link_counter,
+                            new_counter=packet.f_count,
+                            prev_packet_id=device_session.last_packet_id)
 
         last_uplink_mic[device_session.id]= packet.mic
 
