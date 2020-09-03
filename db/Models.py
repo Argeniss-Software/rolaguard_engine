@@ -957,7 +957,6 @@ class Quarantine(Base):
     def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment):
         qrec = cls.find_open_by_type_dev_coll(alert_type, device_id, device_session_id, data_collector_id)
         if qrec:
-            #TODO: following code could be refactored using self.resolve(...)
             qrec.resolve(
                 reason_id=res_reason_id,
                 comment=res_comment,
