@@ -103,6 +103,8 @@ class Gateway(Base):
     npackets_up = Column(Integer, nullable=False, default=0)
     npackets_down = Column(Integer, nullable=False, default=0)
 
+    last_packet_id = Column(BigIntegerType, ForeignKey("packet.id"), nullable=True)
+
     @classmethod
     def create_from_packet(cls, packet):
         vendor = None
@@ -145,6 +147,7 @@ class Gateway(Base):
             if packet.latitude and packet.longitude:
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
+            self.last_packet_id = packet.id
         except Exception as exc:
             log.error(f"Error updating gateway {self.id}: {exc}")
 
