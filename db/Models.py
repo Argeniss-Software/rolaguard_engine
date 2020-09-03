@@ -946,22 +946,23 @@ class Quarantine(Base):
         reason = QuarantineResolutionReason.find_by_type(QuarantineResolutionReasonType.MANUAL)
         if not reason:
             raise RuntimeError(f'Manual quarantine resolution type not found')
-        #TODO: following code could be refactored using self.resolve(...)
-        qRec.resolved_at = datetime.now()
-        qRec.resolved_by_id = user_id
-        qRec.resolution_reason_id = reason.id
-        qRec.resolution_comment = res_comment
-        session.commit()
+        qRec.resolve(
+            resolved_by_id=user_id,
+            reason_id=reason.id,
+            comment=res_comment,
+            commit=True
+        )
 
     @classmethod
     def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment):
         qrec = cls.find_open_by_type_dev_coll(alert_type, device_id, device_session_id, data_collector_id)
         if qrec:
             #TODO: following code could be refactored using self.resolve(...)
-            qrec.resolved_at = datetime.now()
-            qrec.resolution_reason_id = res_reason_id
-            qrec.resolution_comment = res_comment
-            session.commit()
+            qrec.resolve(
+                reason_id=res_reason_id,
+                comment=res_comment,
+                commit=True
+            )
 
 
 Base.metadata.create_all(engine)
