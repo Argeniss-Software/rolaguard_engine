@@ -212,7 +212,9 @@ def process_packet(packet, policy):
                 ((packet.f_count == device_session.up_link_counter) and (last_uplink_mic[device_session.id] != packet.mic))
             ) and
             # To avoid errors when the counter overflows
-            (packet.f_count > 5 or device_session.up_link_counter < 65530)
+            (packet.f_count > 5 or device_session.up_link_counter < 65530) and
+            # Disable this alert for TTN collectors
+            not DataCollector.get(packet.data_collector_id).is_ttn()
             ) :
                 emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
                             counter=device_session.up_link_counter,
