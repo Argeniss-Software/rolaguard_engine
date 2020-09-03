@@ -199,11 +199,8 @@ class DataCollector(Base):
         return session.query(cls).filter(cls.data_collector_type_id == dctype_id, cls.name == name).first()
 
     @classmethod
-    def find_one(cls, id=None):
-        query = session.query(cls)
-        if id:
-            query = query.filter(cls.id == id)
-        return query.first()
+    def get(cls, id):
+        return session.query(cls).get(id)
 
     @classmethod
     def count(cls):
@@ -216,6 +213,9 @@ class DataCollector(Base):
                 filter(Device.data_collector_id == data_collector_id).\
                 distinct().count()
         return ndev
+
+    def is_ttn(self):
+        return self.type.type == 'ttn_collector'
 
     def save(self):
         session.add(self)
