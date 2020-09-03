@@ -872,6 +872,14 @@ class Quarantine(Base):
         session.add(self)
         session.commit()
 
+    def resolve(self, reason_id, comment, resolved_by_id=None, commit=True):
+        self.resolved_at = datetime.now()
+        self.resolved_by_id = resolved_by_id
+        self.resolution_reason_id = reason_id
+        self.resolution_comment = comment
+        if commit:
+            session.commit()
+
     @classmethod
     def find_by_id(cls, id):
         return session.query(cls).filter(cls.id == id).first()
@@ -891,7 +899,7 @@ class Quarantine(Base):
         return cls.find_open_by_type_dev_coll(alert.type, alert.device_id, alert.device_session_id, alert.data_collector_id)
 
     @classmethod
-    def find_open_by_type_dev_coll(cls, alert_type, device_id, device_session_id, data_collector_id):
+    def find_open_by_type_dev_coll(cls, alert_type, device_id, device_session_id=None, data_collector_id=None, returnAll=False):
         q = session.query(cls).join(Alert).filter(Alert.type == alert_type, cls.resolved_at == None)
         if device_id:
             q = q.filter(Alert.device_id == device_id)
@@ -899,6 +907,8 @@ class Quarantine(Base):
             q = q.filter(Alert.device_session_id == device_session_id)
         if data_collector_id:
             q = q.filter(Alert.data_collector_id == data_collector_id)
+        if returnAll:
+            return q.all()
         return q.first()
 
     @classmethod
@@ -936,6 +946,7 @@ class Quarantine(Base):
         reason = QuarantineResolutionReason.find_by_type(QuarantineResolutionReasonType.MANUAL)
         if not reason:
             raise RuntimeError(f'Manual quarantine resolution type not found')
+        #TODO: following code could be refactored using self.resolve(...)
         qRec.resolved_at = datetime.now()
         qRec.resolved_by_id = user_id
         qRec.resolution_reason_id = reason.id
@@ -946,6 +957,7 @@ class Quarantine(Base):
     def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment):
         qrec = cls.find_open_by_type_dev_coll(alert_type, device_id, device_session_id, data_collector_id)
         if qrec:
+            #TODO: following code could be refactored using self.resolve(...)
             qrec.resolved_at = datetime.now()
             qrec.resolution_reason_id = res_reason_id
             qrec.resolution_comment = res_comment

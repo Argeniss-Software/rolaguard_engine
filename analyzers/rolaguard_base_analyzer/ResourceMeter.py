@@ -1,6 +1,6 @@
-from db.Models import Device, Gateway
+from db.Models import Device, Gateway, Quarantine
 from datetime import date
-
+import logging
 
 class ResourceMeter():
     # Moving average weight, must be between 0 and 1.
@@ -64,6 +64,18 @@ class ResourceMeter():
 
         if packet.uplink and self.device_stats[device.id]["last_fcount"]:
             device.last_activity = packet.date
+
+            # If device is reconnecting, then resolve every "not transmitting"
+            # issue for this device, with reason_id 0 (problem solved automatically)
+            if not device.connected:
+                issues = Quarantine.find_open_by_type_dev_coll(alert_type='LAF-401', device_id=device.id, returnAll=True)
+                for issue in issues:
+                    issue.resolve(
+                        reason_id=0,
+                        comment="The device has transmitted again",
+                        commit=False
+                    )
+
             device.connected = True
 
             last_fcount = self.device_stats[device.id]["last_fcount"]
