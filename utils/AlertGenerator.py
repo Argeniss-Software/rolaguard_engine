@@ -105,7 +105,7 @@ def print_alert(alert):
             message= message.replace('{'+param_name+'}', str(param_value))
         message= message.replace('{'+'packet_id'+'}', str(alert.packet_id))
         message= message.replace('{'+'created_at'+'}', alert.created_at.strftime('%Y-%m-%d %H:%M'))
-        collector= DataCollector.find_one(alert.data_collector_id)
+        collector= DataCollector.get(alert.data_collector_id)
         if collector:
             message= message.replace('{'+'collector.name'+'}', collector.name+' (ID '+str(collector.id)+')')
     except Exception as e:
