@@ -8,7 +8,8 @@ class ResourceMeter():
     maw = 0.9
 
     def __init__(self):
-        self.device_stats = {}
+        self.device_stats = {}  # in memory dict that stores statistics for all the recognized devices
+                                # indexed by device id
         self.gateway_stats = {}
         self.last_gc = date.today()
 
@@ -28,22 +29,25 @@ class ResourceMeter():
         packet.uplink = packet.m_type in ["ConfirmedDataUp", "UnconfirmedDataUp"]
 
         if type(asset) == Device:
-            if asset.id in self.device_stats:
+            if asset.id in self.device_stats: # entry for this device already created in device stats dict, update values
                 if self.device_resource_usage(asset, packet):
                     if packet.uplink:
                         self.device_stats[asset.id]["last_fcount"] = packet.f_count
                     else:
                         self.device_stats[asset.id]["last_fcount_down"] = packet.f_count
                     self.device_stats[asset.id]["last_date"] = packet.date
-            else:
+            else: # initialize device_stats dict entry with default values
                 self.device_stats[asset.id] = {
                     "last_fcount" : packet.f_count if packet.uplink else None,
                     "last_fcount_down" : packet.f_count if not packet.uplink else None,
                     "last_date" : packet.date,
-                    "rssi" : {}
+                    "rssi" : {},    # dict containing the gateway hex ids in which the device is connected as key, and rssi numbers as values 
+                    "lsnr" : {}     # dict containing the gateway hex ids in which the device is connected as key, and lsnr numbers as values 
                 }
                 if packet.rssi is not None:
-                    self.device_stats[packet.gateway] = packet.rssi
+                    self.device_stats[asset.id]["rssi"][packet.gateway] = packet.rssi
+                if packet.lsnr is not None:
+                    self.device_stats[asset.id]["lsnr"][packet.gateway] = packet.lsnr
         if type(asset) == Gateway:
             if asset.id in self.gateway_stats:
                 self.gateway_resource_usage(asset, packet)
@@ -111,6 +115,31 @@ class ResourceMeter():
             try:
                 device.max_rssi = max(self.device_stats[device.id]["rssi"].values())
             except: pass
+
+            # Update the max lsnr value of the device, considering all the gateways
+            if packet.lsnr is not None:
+                if packet.gateway in self.device_stats[device.id]["lsnr"]:
+                    self.device_stats[device.id]["lsnr"][packet.gateway] = \
+                        self.maw *  self.device_stats[device.id]["lsnr"][packet.gateway] + \
+                        (1 - self.maw) * packet.lsnr
+                else:
+                    self.device_stats[device.id]["lsnr"][packet.gateway] = packet.lsnr
+
+            try:
+                device.max_lsnr = max(self.device_stats[device.id]["lsnr"].values())
+            except: pass
+
+            # Update number of gateways that the device is listening to 
+            # TODO: delete rssi and lsnr device_stats entries for devices
+            #       that have not transmitted for a certain period
+            #       to avoid counting devices that are not transmitting anymore
+            rssi_gw = set(self.device_stats.get(device.id).get("rssi").keys())
+            lsnr_gw = set(self.device_stats.get(device.id).get("lsnr").keys())
+            device.ngateways_connected_to = len(list((rssi_gw | lsnr_gw))) 
+
+            # Update size of payload
+            device.payload_size = len(packet.data)
+            
         return True
 
 

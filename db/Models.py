@@ -271,6 +271,9 @@ class Device(Base):
     npackets_down = Column(Integer, nullable=False, default=0)
     npackets_lost = Column(Float, nullable=False, default=0)
     max_rssi = Column(Float, nullable=True)
+    max_lsnr = Column(Float, nullable=True)
+    ngateways_connected_to = Column(Integer, nullable=False, default=0)
+    payload_size = Column(Integer, nullable=True)
 
     @classmethod
     def get(cls, id):
