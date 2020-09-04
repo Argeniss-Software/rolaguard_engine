@@ -118,6 +118,18 @@ class ResourceMeter():
         gateway.npackets_up += 1 if packet.uplink else 0
         gateway.npackets_down += 1 if not packet.uplink else 0
         gateway.last_activity = packet.date
+
+        # If gateway is reconnecting, then resolve every "not transmitting"
+        # issue for this gateway, with reason_id 0 (problem solved automatically)
+        if not gateway.connected:
+            issues = Quarantine.find_open_by_type_dev_coll(alert_type='LAF-403', gateway_id=gateway.id, returnAll=True)
+            for issue in issues:
+                issue.resolve(
+                    reason_id=0,
+                    comment="The gateway has transmitted again",
+                    commit=False
+                )
+
         gateway.connected = True
 
         # Update activity_freq (which is the time between packets)
