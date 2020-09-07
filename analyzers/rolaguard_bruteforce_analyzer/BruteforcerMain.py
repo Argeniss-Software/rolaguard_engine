@@ -34,6 +34,7 @@ def process_packet(packet, policy):
         
         # device_obj = ObjectInstantiator.get_or_error_device(packet)
         device_obj = Device.find_with(dev_eui=packet.dev_eui, data_collector_id=packet.data_collector_id)
+        if not device_obj: return
 
         # Before cracking with many different keys, try with a PotentialAppKey previously found. In case this key is valid, we are pretty sure that is the correct AppKey
         device_auth_obj = DeviceAuthData.find_one_by_device_id(device_obj.id)
