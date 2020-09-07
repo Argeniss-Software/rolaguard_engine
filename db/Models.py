@@ -899,7 +899,7 @@ class Quarantine(Base):
         return cls.find_open_by_type_dev_coll(alert.type, alert.device_id, alert.device_session_id, alert.data_collector_id)
 
     @classmethod
-    def find_open_by_type_dev_coll(cls, alert_type, device_id=None, gateway_id=None, device_session_id=None, data_collector_id=None, returnAll=False):
+    def find_open_by_type_dev_coll(cls, alert_type, device_id=None, device_session_id=None, data_collector_id=None, returnAll=False, gateway_id=None):
         q = session.query(cls).join(Alert).filter(Alert.type == alert_type, cls.resolved_at == None)
         if device_id:
             q = q.filter(Alert.device_id == device_id)
