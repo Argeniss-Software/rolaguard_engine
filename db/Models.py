@@ -271,6 +271,9 @@ class Device(Base):
     npackets_down = Column(Integer, nullable=False, default=0)
     npackets_lost = Column(Float, nullable=False, default=0)
     max_rssi = Column(Float, nullable=True)
+    max_lsnr = Column(Float, nullable=True)
+    ngateways_connected_to = Column(Integer, nullable=False, default=0)
+    payload_size = Column(Integer, nullable=True)
 
     @classmethod
     def get(cls, id):
@@ -331,11 +334,11 @@ class DeviceVendorPrefix(Base):
 
     @classmethod
     def get_vendor_from_dev_eui(cls, dev_eui):
-        row = session.query(cls).filter(cls.prefix == dev_eui[0:6].upper()).first()
+        row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
         if not row:
             row = session.query(cls).filter(cls.prefix == dev_eui[0:7].upper()).first()
         if not row:
-            row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
+            row = session.query(cls).filter(cls.prefix == dev_eui[0:6].upper()).first()
         return row.vendor if row else None
 
 
