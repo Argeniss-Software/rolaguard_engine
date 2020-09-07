@@ -103,6 +103,8 @@ class Gateway(Base):
     npackets_up = Column(Integer, nullable=False, default=0)
     npackets_down = Column(Integer, nullable=False, default=0)
 
+    last_packet_id = Column(BigIntegerType, ForeignKey("packet.id"), nullable=True)
+
     @classmethod
     def create_from_packet(cls, packet):
         vendor = None
@@ -145,6 +147,7 @@ class Gateway(Base):
             if packet.latitude and packet.longitude:
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
+            self.last_packet_id = packet.id
         except Exception as exc:
             log.error(f"Error updating gateway {self.id}: {exc}")
 
@@ -199,11 +202,8 @@ class DataCollector(Base):
         return session.query(cls).filter(cls.data_collector_type_id == dctype_id, cls.name == name).first()
 
     @classmethod
-    def find_one(cls, id=None):
-        query = session.query(cls)
-        if id:
-            query = query.filter(cls.id == id)
-        return query.first()
+    def get(cls, id):
+        return session.query(cls).get(id)
 
     @classmethod
     def count(cls):
@@ -216,6 +216,9 @@ class DataCollector(Base):
                 filter(Device.data_collector_id == data_collector_id).\
                 distinct().count()
         return ndev
+
+    def is_ttn(self):
+        return self.type.type == 'ttn_collector'
 
     def save(self):
         session.add(self)
@@ -869,6 +872,14 @@ class Quarantine(Base):
         session.add(self)
         session.commit()
 
+    def resolve(self, reason_id, comment, resolved_by_id=None, commit=True):
+        self.resolved_at = datetime.now()
+        self.resolved_by_id = resolved_by_id
+        self.resolution_reason_id = reason_id
+        self.resolution_comment = comment
+        if commit:
+            session.commit()
+
     @classmethod
     def find_by_id(cls, id):
         return session.query(cls).filter(cls.id == id).first()
@@ -888,14 +899,18 @@ class Quarantine(Base):
         return cls.find_open_by_type_dev_coll(alert.type, alert.device_id, alert.device_session_id, alert.data_collector_id)
 
     @classmethod
-    def find_open_by_type_dev_coll(cls, alert_type, device_id, device_session_id, data_collector_id):
+    def find_open_by_type_dev_coll(cls, alert_type, device_id=None, gateway_id=None, device_session_id=None, data_collector_id=None, returnAll=False):
         q = session.query(cls).join(Alert).filter(Alert.type == alert_type, cls.resolved_at == None)
         if device_id:
             q = q.filter(Alert.device_id == device_id)
+        if gateway_id:
+            q = q.filter(Alert.gateway_id == gateway_id)
         if device_session_id:
             q = q.filter(Alert.device_session_id == device_session_id)
         if data_collector_id:
             q = q.filter(Alert.data_collector_id == data_collector_id)
+        if returnAll:
+            return q.all()
         return q.first()
 
     @classmethod
@@ -933,20 +948,22 @@ class Quarantine(Base):
         reason = QuarantineResolutionReason.find_by_type(QuarantineResolutionReasonType.MANUAL)
         if not reason:
             raise RuntimeError(f'Manual quarantine resolution type not found')
-        qRec.resolved_at = datetime.now()
-        qRec.resolved_by_id = user_id
-        qRec.resolution_reason_id = reason.id
-        qRec.resolution_comment = res_comment
-        session.commit()
+        qRec.resolve(
+            resolved_by_id=user_id,
+            reason_id=reason.id,
+            comment=res_comment,
+            commit=True
+        )
 
     @classmethod
     def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment):
         qrec = cls.find_open_by_type_dev_coll(alert_type, device_id, device_session_id, data_collector_id)
         if qrec:
-            qrec.resolved_at = datetime.now()
-            qrec.resolution_reason_id = res_reason_id
-            qrec.resolution_comment = res_comment
-            session.commit()
+            qrec.resolve(
+                reason_id=res_reason_id,
+                comment=res_comment,
+                commit=True
+            )
 
 
 Base.metadata.create_all(engine)
