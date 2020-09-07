@@ -334,11 +334,11 @@ class DeviceVendorPrefix(Base):
 
     @classmethod
     def get_vendor_from_dev_eui(cls, dev_eui):
-        row = session.query(cls).filter(cls.prefix == dev_eui[0:6].upper()).first()
+        row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
         if not row:
             row = session.query(cls).filter(cls.prefix == dev_eui[0:7].upper()).first()
         if not row:
-            row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
+            row = session.query(cls).filter(cls.prefix == dev_eui[0:6].upper()).first()
         return row.vendor if row else None
 
 
