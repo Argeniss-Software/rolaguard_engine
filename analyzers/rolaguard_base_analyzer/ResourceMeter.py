@@ -13,7 +13,7 @@ class ResourceMeter():
         self.gateway_stats = {}
         self.last_gc = date.today()
 
-    def __call__(self, asset, packet):
+    def __call__(self, asset, packet, policy_manager):
         """
         Main function of the ResourceMeter. It calculates some stats for the assets
         and update the corresponding fields in the DB object (it doesn't commit the
@@ -30,24 +30,26 @@ class ResourceMeter():
 
         if type(asset) == Device:
             if asset.id in self.device_stats: # entry for this device already created in device stats dict, update values
-                if self.device_resource_usage(asset, packet):
+                if self.device_resource_usage(asset, packet, policy_manager):
                     if packet.uplink:
                         self.device_stats[asset.id]["last_fcount"] = packet.f_count
                     else:
                         self.device_stats[asset.id]["last_fcount_down"] = packet.f_count
-                    self.device_stats[asset.id]["last_date"] = packet.date
+                    self.device_stats[asset.id]["last_date"][packet.gateway] = packet.date
             else: # initialize device_stats dict entry with default values
                 self.device_stats[asset.id] = {
                     "last_fcount" : packet.f_count if packet.uplink else None,
                     "last_fcount_down" : packet.f_count if not packet.uplink else None,
-                    "last_date" : packet.date,
-                    "rssi" : {},    # dict containing the gateway hex ids in which the device is connected as key, and rssi numbers as values 
-                    "lsnr" : {}     # dict containing the gateway hex ids in which the device is connected as key, and lsnr numbers as values 
+                    "last_date" : {},   # dict containing the gateway hex ids in which the device is connected as key, and most recent date of packet as values 
+                    "rssi" : {},        # dict containing the gateway hex ids in which the device is connected as key, and rssi numbers as values 
+                    "lsnr" : {}         # dict containing the gateway hex ids in which the device is connected as key, and lsnr numbers as values 
                 }
                 if packet.rssi is not None:
                     self.device_stats[asset.id]["rssi"][packet.gateway] = packet.rssi
                 if packet.lsnr is not None:
                     self.device_stats[asset.id]["lsnr"][packet.gateway] = packet.lsnr
+                if packet.gateway:
+                    self.device_stats[asset.id]["last_date"][packet.gateway] = packet.date
         if type(asset) == Gateway:
             if asset.id in self.gateway_stats:
                 self.gateway_resource_usage(asset, packet)
@@ -57,7 +59,7 @@ class ResourceMeter():
             }
 
 
-    def device_resource_usage(self, device, packet):
+    def device_resource_usage(self, device, packet, policy_manager):
         if packet.uplink and packet.f_count == self.device_stats[device.id]["last_fcount"]: 
             return # Repeated uplink packet
         if not packet.uplink and packet.f_count == self.device_stats[device.id]["last_fcount_down"]: 
@@ -91,7 +93,8 @@ class ResourceMeter():
                 return False
 
             # Update activity_freq (which is the time between packets)
-            time_diff = (packet.date - self.device_stats[device.id]["last_date"]).seconds / count_diff
+            most_recent_date = (max(self.device_stats[device.id]["last_date"].values())) if self.device_stats[device.id].get("last_date") else packet.date 
+            time_diff = (packet.date - most_recent_date).seconds / count_diff
             if device.activity_freq:
                 device.activity_freq = self.maw * device.activity_freq + (1-self.maw) * time_diff
             else:
@@ -129,10 +132,27 @@ class ResourceMeter():
                 device.max_lsnr = max(self.device_stats[device.id]["lsnr"].values())
             except: pass
 
-            # Update number of gateways that the device is listening to 
-            # TODO: delete rssi and lsnr device_stats entries for devices
-            #       that have not transmitted for a certain period
-            #       to avoid counting devices that are not transmitting anymore
+            # Delete gateways that are not listening to this device for
+            # more than 1/disconnection_sensitivity times the device frequency
+            current_gw = set([packet.gateway])
+            other_gws = set(self.device_stats[device.id]["last_date"].keys())
+            gws_to_check = other_gws - current_gw
+            gws_to_del = []
+            disconnection_sensitivity = 1/policy_manager.get_parameters("LAF-401").get("disconnection_sensitivity")
+
+            for gw_to_check in list(gws_to_check):
+                if self.device_stats[device.id]["last_date"].get(gw_to_check) and\
+                    (packet.date - self.device_stats[device.id]["last_date"].get(gw_to_check)).seconds >\
+                    disconnection_sensitivity * device.activity_freq:
+
+                    gws_to_del.append(gw_to_check)
+
+            for gw_to_del in gws_to_del:
+                self.device_stats[device.id]["last_date"].pop(gw_to_del, None)
+                self.device_stats[device.id]["rssi"].pop(gw_to_del, None)
+                self.device_stats[device.id]["lsnr"].pop(gw_to_del, None)
+
+            # Update number of gateways that are listening to the device 
             rssi_gw = set(self.device_stats.get(device.id).get("rssi").keys())
             lsnr_gw = set(self.device_stats.get(device.id).get("lsnr").keys())
             device.ngateways_connected_to = len(list((rssi_gw | lsnr_gw))) 
