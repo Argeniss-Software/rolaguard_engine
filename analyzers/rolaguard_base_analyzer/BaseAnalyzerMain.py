@@ -38,37 +38,39 @@ def process_packet(packet, policy):
     ## Gateway instantiation
     if gateway is None and packet.gateway:
         gateway = Gateway.create_from_packet(packet)
-        gateway.save()
+        gateway.save(commit=False)
         emit_alert("LAF-402", packet, gateway = gateway)
 
     ## Session instantiation
     if device_session is None and packet.dev_addr:
         device_session = DeviceSession.create_from_packet(packet)
-        device_session.save()
+        device_session.save(commit=False)
 
         ## Device instantiation (only with data packets)
         if device is None and packet.dev_eui:
             device = Device.create_from_packet(packet)
-            device.save()
+            device.save(commit=False)
             if policy.is_enabled("LAF-400"):
                 emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
                             number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
         
         if device:
+            #TODO: Check if it should use device_session or not as parameter
             Quarantine.remove_from_quarantine(
                 "LAF-404",
                 device_id = device.id,
                 device_session_id = device_session.id,
                 data_collector_id = packet.data_collector_id,
                 res_reason_id = 3,
-                res_comment = "Device connected"
+                res_comment = "Device connected",
+                commit=False
                 )
     chrono.stop()
 
     ## Associations
     chrono.start("dev2sess")
     if device and gateway:
-        GatewayToDevice.associate(gateway.id, device.id)
+        GatewayToDevice.associate(gateway_id=gateway.id, device_id=device.id, commit=False)
     chrono.stop()
 
     ## Associate device with device_session
