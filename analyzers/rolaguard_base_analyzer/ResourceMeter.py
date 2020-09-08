@@ -44,9 +44,9 @@ class ResourceMeter():
                     "rssi" : {},        # dict containing the gateway hex ids in which the device is connected as key, and rssi numbers as values 
                     "lsnr" : {}         # dict containing the gateway hex ids in which the device is connected as key, and lsnr numbers as values 
                 }
-                if packet.rssi:
+                if packet.rssi is not None:
                     self.device_stats[asset.id]["rssi"][packet.gateway] = packet.rssi
-                if packet.lsnr:
+                if packet.lsnr is not None:
                     self.device_stats[asset.id]["lsnr"][packet.gateway] = packet.lsnr
                 if packet.gateway:
                     self.device_stats[asset.id]["last_date"][packet.gateway] = packet.date
