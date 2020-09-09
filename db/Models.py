@@ -276,6 +276,10 @@ class Device(Base):
     ngateways_connected_to = Column(Integer, nullable=False, default=0)
     payload_size = Column(Integer, nullable=True)
 
+    last_packets_list = Column(String(1024), nullable=True, default='[]')
+
+    MAX_PACKETS_LIST_SIZE = 10
+
     @classmethod
     def get(cls, id):
         return session.query(cls).filter(cls.id == id).first()
@@ -294,7 +298,8 @@ class Device(Base):
             app_name = packet.app_name,
             last_activity = packet.date,
             data_collector_id = packet.data_collector_id,
-            pending_first_connection = True
+            pending_first_connection = True,
+            last_packets_list = '[]'
             )
 
     @classmethod
@@ -327,6 +332,12 @@ class Device(Base):
                 self.join_request_counter += 1
                 self.is_otaa = True
             self.last_packet_id = packet.id
+            if packet.m_type in ["UnconfirmedDataUp", "ConfirmedDataUp", "JoinRequest"]:
+                packets_list = json.loads(self.last_packets_list)
+                packets_list.append(packet.id)
+                if len(packets_list) > self.MAX_PACKETS_LIST_SIZE:
+                    packets_list.pop(0)
+                self.last_packets_list = json.dumps(packets_list)
         except Exception as exc:
             log.error(f"Error while updating device {self.dev_eui}: {exc}")
 
