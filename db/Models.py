@@ -264,6 +264,7 @@ class Device(Base):
     is_otaa = Column(Boolean, nullable=True)
     last_packet_id = Column(BigIntegerType, ForeignKey("packet.id"), nullable=True)
 
+    pending_first_connection = Column(Boolean, nullable=False, default=True)
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
     activity_freq = Column(Float, nullable=True)
@@ -292,7 +293,8 @@ class Device(Base):
             connected = "Up" in packet.m_type,
             app_name = packet.app_name,
             last_activity = packet.date,
-            data_collector_id = packet.data_collector_id
+            data_collector_id = packet.data_collector_id,
+            pending_first_connection = True
             )
 
     @classmethod
@@ -310,6 +312,9 @@ class Device(Base):
             session.commit()
         except Exception as exc:
             log.error(f"Error creating device: {exc}")
+
+    def db_update(cls):
+        session.commit()
         
     def update_state(self, packet):
         try:

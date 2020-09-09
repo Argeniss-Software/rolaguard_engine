@@ -41,34 +41,40 @@ def process_packet(packet, policy):
         gateway.save()
         emit_alert("LAF-402", packet, gateway = gateway)
 
+    ## Device instantiation
+    if device is None and packet.dev_eui:
+        device = Device.create_from_packet(packet)
+        device.save()
+
     ## Session instantiation
     if device_session is None and packet.dev_addr:
         device_session = DeviceSession.create_from_packet(packet)
         device_session.save()
-
-        ## Device instantiation (only with data packets)
-        if device is None and packet.dev_eui:
-            device = Device.create_from_packet(packet)
-            device.save()
-            if policy.is_enabled("LAF-400"):
-                emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
-                            number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
         
         if device:
             Quarantine.remove_from_quarantine(
                 "LAF-404",
                 device_id = device.id,
-                device_session_id = device_session.id,
+                device_session_id = None,
                 data_collector_id = packet.data_collector_id,
                 res_reason_id = 3,
                 res_comment = "Device connected"
                 )
+
+    ## Emit new device alert if it is the first data packet
+    if device and device_session and device.pending_first_connection:
+        device.pending_first_connection = False
+        device.db_update()
+        if policy.is_enabled("LAF-400"):
+            emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
+                    number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
+
     chrono.stop()
 
     ## Associations
     chrono.start("dev2sess")
     if device and gateway:
-        GatewayToDevice.associate(gateway.id, device.id)
+        GatewayToDevice.associate(gateway_id=gateway.id, device_id=device.id)
     chrono.stop()
 
     ## Associate device with device_session
@@ -113,11 +119,7 @@ def process_packet(packet, policy):
             if device:
                 emit_alert("LAF-404", packet, device=device, gateway=gateway)
             else:
-                emit_alert("LAF-404", packet, gateway=gateway,
-                    dev_eui = packet.dev_eui,
-                    dev_name = packet.dev_name,
-                    vendor = DeviceVendorPrefix.get_vendor_from_dev_eui(packet.dev_eui)
-                    )
+                log.warning(f"Device not found in DB when LAF-404 detected for device {packet.dev_eui} from data collector {packet.data_collector_id}")
     
 
     ## Check alert LAF-010
