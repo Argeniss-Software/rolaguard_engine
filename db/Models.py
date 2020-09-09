@@ -972,6 +972,8 @@ class Quarantine(Base):
                 comment=res_comment,
                 commit=True
             )
+            return True
+        return False
 
 
 Base.metadata.create_all(engine)
