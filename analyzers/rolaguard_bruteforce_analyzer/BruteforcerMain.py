@@ -217,7 +217,7 @@ def process_packet(packet, policy):
                 packet,
                 device = device_obj,
                 alert_solved = AlertType.find_one_by_code("LAF-009").name,
-                resolution_comment = res_comment
+                resolution_reason = res_comment
             )
 
 
