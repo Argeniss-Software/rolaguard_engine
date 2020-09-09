@@ -234,7 +234,7 @@ def process_packet(packet, policy):
             device = device,
             device_session = device_session,
             gateway = gateway,
-            rssi = packet.rssi
+            rssi = device.max_rssi
             )
 
     ## Check alert LAF-101
@@ -250,7 +250,21 @@ def process_packet(packet, policy):
             gateway=gateway,
             packets_lost=device.npackets_lost
             )
+
+    ## Check alert LAF-102
+    if(
+        device and \
+        device.max_lsnr is not None and \
+        device.max_lsnr < policy.get_parameters("LAF-102")["minimum_lsnr"]
+    ):
+        emit_alert(
+            "LAF-102", 
+            packet=packet,
+            device=device,
+            device_session=device_session,
+            gateway=gateway,
+            lsnr=device.max_lsnr
+        )
+
     chrono.stop("total")
     chrono.lap()
-
-            
