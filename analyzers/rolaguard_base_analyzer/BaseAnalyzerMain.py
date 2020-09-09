@@ -1,7 +1,7 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
 from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Quarantine, DeviceVendorPrefix
+    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
@@ -52,7 +52,7 @@ def process_packet(packet, policy):
         device_session.save()
         
         if device:
-            Quarantine.remove_from_quarantine(
+            issue_solved = Quarantine.remove_from_quarantine(
                 "LAF-404",
                 device_id = device.id,
                 device_session_id = None,
@@ -60,6 +60,15 @@ def process_packet(packet, policy):
                 res_reason_id = 3,
                 res_comment = "Device connected"
                 )
+            if issue_solved:
+                emit_alert(
+                    "LAF-600",
+                    packet,
+                    device = device,
+                    alert_solved = AlertType.find_one_by_code("LAF-404").name,
+                    resolution_reason = "Device connected"
+                )
+
 
     ## Emit new device alert if it is the first data packet
     if device and device_session and device.pending_first_connection:
