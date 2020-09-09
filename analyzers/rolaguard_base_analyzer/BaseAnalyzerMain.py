@@ -58,7 +58,7 @@ def process_packet(packet, policy):
                 device_session_id = None,
                 data_collector_id = packet.data_collector_id,
                 res_reason_id = 3,
-                res_comment = "Device connected",
+                res_comment = "Device connected"
                 )
 
     ## Emit new device alert if it is the first data packet

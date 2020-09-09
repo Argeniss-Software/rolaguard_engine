@@ -134,11 +134,10 @@ class Gateway(Base):
     def get(cls, id):
         return session(cls).query(cls.id == id)
 
-    def save(self, commit=True):
+    def save(self):
         try:
             session.add(self)
-            if commit:
-                session.commit()
+            session.commit()
         except Exception as exc:
             log.error(f"Error creating gateway: {exc}")
         
@@ -307,11 +306,10 @@ class Device(Base):
         else:
             return None
 
-    def save(self, commit=True):
+    def save(self):
         try:
             session.add(self)
-            if commit:
-                session.commit()
+            session.commit()
         except Exception as exc:
             log.error(f"Error creating device: {exc}")
 
@@ -389,7 +387,7 @@ class GatewayToDevice(Base):
         return [id[0] for id in gateway_ids]
 
     @classmethod
-    def associate(cls, gateway_id, device_id, commit=True):
+    def associate(cls, gateway_id, device_id):
         try:
             row = session.query(GatewayToDevice).\
                 filter(cls.gateway_id == gateway_id).\
@@ -400,8 +398,7 @@ class GatewayToDevice(Base):
                     device_id = device_id
                 )
                 session.add(row)
-                if commit:
-                    session.commit()
+                session.commit()
         except Exception as exc:
             session.rollback()
             log.error(f"Error trying to add GatewayToDevice: {exc}")
@@ -484,11 +481,10 @@ class DeviceSession(Base):
         else:
             return None
 
-    def save(self, commit=True):
+    def save(self):
         try:
             session.add(self)
-            if commit:
-                session.commit()
+            session.commit()
         except Exception as exc:
             log.error(f"Error creating device session: {exc}")
 
@@ -968,13 +964,13 @@ class Quarantine(Base):
         )
 
     @classmethod
-    def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment, commit=True):
+    def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment):
         qrec = cls.find_open_by_type_dev_coll(alert_type, device_id, device_session_id, data_collector_id)
         if qrec:
             qrec.resolve(
                 reason_id=res_reason_id,
                 comment=res_comment,
-                commit=commit
+                commit=True
             )
 
 
