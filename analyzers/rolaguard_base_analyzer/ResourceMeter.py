@@ -1,5 +1,6 @@
-from db.Models import Device, Gateway, Quarantine
+from db.Models import Device, Gateway, Quarantine, AlertType
 from datetime import date
+from utils import emit_alert
 import logging
 
 class ResourceMeter():
@@ -80,6 +81,13 @@ class ResourceMeter():
                         reason_id=0,
                         comment="The device has transmitted again",
                         commit=False
+                    )
+                    emit_alert(
+                        "LAF-600",
+                        packet,
+                        device = device,
+                        alert_solved = AlertType.find_one_by_code("LAF-401").name,
+                        resolution_reason = "The device has transmitted again"
                     )
 
             device.connected = True
@@ -177,6 +185,13 @@ class ResourceMeter():
                     reason_id=0,
                     comment="The gateway has transmitted again",
                     commit=False
+                )
+                emit_alert(
+                    "LAF-600",
+                    packet,
+                    gateway = gateway,
+                    alert_solved = AlertType.find_one_by_code("LAF-403").name,
+                    resolution_reason = "The gateway has transmitted again"
                 )
 
         gateway.connected = True
