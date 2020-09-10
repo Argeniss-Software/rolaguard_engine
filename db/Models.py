@@ -335,7 +335,7 @@ class Device(Base):
             if packet.m_type in ["UnconfirmedDataUp", "ConfirmedDataUp", "JoinRequest"]:
                 packets_list = json.loads(self.last_packets_list)
                 packets_list.append(packet.id)
-                if len(packets_list) > self.MAX_PACKETS_LIST_SIZE:
+                while len(packets_list) > self.MAX_PACKETS_LIST_SIZE:
                     packets_list.pop(0)
                 self.last_packets_list = json.dumps(packets_list)
         except Exception as exc:
