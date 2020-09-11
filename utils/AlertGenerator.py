@@ -16,6 +16,7 @@ alert_blocked_by = {
     "LAF-102" : ["LAF-102"]
 }
 
+gateway_alerts = ["LAF-010", "LAF-402", "LAF-403"]
 
 def emit_alert(alert_type, packet, device=None, device_session=None, gateway=None, device_auth_id=None, **custom_parameters):
     try:
@@ -65,6 +66,10 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
                 if issue:
                     blocked = True
                     break
+        
+        if alert_type in gateway_alerts:
+            device = None
+            device_session = None
                                                         
         alert = Alert(
             type = alert_type,
