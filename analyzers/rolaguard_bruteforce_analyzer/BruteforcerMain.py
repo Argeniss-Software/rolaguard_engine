@@ -140,8 +140,6 @@ def process_packet(packet, policy):
                             potential_key_obj.save()
                     except Exception as exc:
                         logging.error("Error trying to save PotentialAppKey at JoinRequest: {0}".format(exc))           
-        else:
-            logging.debug("Skipping JoinRequest for DevEUI {2}. Elapsed {0} hours of {1}".format(elapsed.seconds/3600, hours_betweeen_bruteforce_trials, device_obj.dev_eui ))
     
     elif packet.m_type == "JoinAccept" and packet.data is not None:
 
