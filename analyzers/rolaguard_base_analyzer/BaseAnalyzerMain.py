@@ -196,7 +196,7 @@ def process_packet(packet, policy):
                                             new_counter=packet.f_count,
                                             prev_packet_id=device_session.last_packet_id)
                         else:
-                            if policy.is_enabled("LAF-006"):
+                            if policy.is_enabled("LAF-006") and not device.is_otaa:
                                 emit_alert("LAF-006", packet,
                                             device=device,
                                             device_session=device_session,
