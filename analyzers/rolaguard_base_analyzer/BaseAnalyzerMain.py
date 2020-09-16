@@ -65,6 +65,7 @@ def process_packet(packet, policy):
                     "LAF-600",
                     packet,
                     device = device,
+                    alert_solved_type = "LAF-404",
                     alert_solved = AlertType.find_one_by_code("LAF-404").name,
                     resolution_reason = "Device connected"
                 )

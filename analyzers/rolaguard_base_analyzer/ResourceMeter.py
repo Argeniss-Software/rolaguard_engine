@@ -86,6 +86,7 @@ class ResourceMeter():
                         "LAF-600",
                         packet,
                         device = device,
+                        alert_solved_type = "LAF-401",
                         alert_solved = AlertType.find_one_by_code("LAF-401").name,
                         resolution_reason = "The device has transmitted again"
                     )
@@ -190,6 +191,7 @@ class ResourceMeter():
                     "LAF-600",
                     packet,
                     gateway = gateway,
+                    alert_solved_type = "LAF-403",
                     alert_solved = AlertType.find_one_by_code("LAF-403").name,
                     resolution_reason = "The gateway has transmitted again"
                 )
