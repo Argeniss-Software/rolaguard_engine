@@ -6,7 +6,7 @@ import logging
 class ResourceMeter():
     # Moving average weight, must be between 0 and 1.
     # The greater the value is, the longer is the period averaged to calculate stats.
-    maw = 0.9
+    maw = 0.5
 
     def __init__(self):
         self.device_stats = {}  # in memory dict that stores statistics for all the recognized devices
