@@ -276,9 +276,9 @@ class Device(Base):
     ngateways_connected_to = Column(Integer, nullable=False, default=0)
     payload_size = Column(Integer, nullable=True)
 
-    last_packets_list = Column(String(1024), nullable=True, default='[]')
+    last_packets_list = Column(String(2048), nullable=True, default='[]')
 
-    MAX_PACKETS_LIST_SIZE = 10
+    MAX_PACKETS_LIST_SIZE = 200
 
     @classmethod
     def get(cls, id):
