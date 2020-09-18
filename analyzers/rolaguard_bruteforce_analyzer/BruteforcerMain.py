@@ -39,21 +39,17 @@ def process_packet(packet, policy):
         # Before cracking with many different keys, try with a PotentialAppKey previously found. In case this key is valid, we are pretty sure that is the correct AppKey
         device_auth_obj = DeviceAuthData.find_one_by_device_id(device_obj.id)
         if device_auth_obj and extractMIC(device_auth_obj.join_request)!= packet.mic:
-            pot_app_keys = PotentialAppKey.find_all_by_device_auth_id(device_auth_obj.id)
+            pot_app_keys = [pk.app_key_hex for pk in PotentialAppKey.find_all_by_device_auth_id(device_auth_obj.id)]
 
             if len(pot_app_keys) > 0:
-                
-                keys_to_test=[bytes(pk.app_key_hex.rstrip().upper(), encoding='utf-8') for pk in pot_app_keys] 
-                keys_to_test = list(dict.fromkeys(keys_to_test))
-
                 correct_app_keys = LorawanWrapper.testAppKeysWithJoinRequest(
-                    keys_to_test,
-                    packet.data,
+                    keys = [bytes(pk, encoding='utf-8') for pk in pot_app_keys],
+                    data = packet.data,
                     dontGenerateKeys = True).split()
                 correct_app_keys = [ak.upper().rstrip() for ak in correct_app_keys]
                 key_tested = True
 
-                pk_to_remove = [pk.hex().upper() for pk in keys_to_test if pk.hex().upper() not in correct_app_keys]
+                pk_to_remove = [pk for pk in pot_app_keys if pk not in correct_app_keys]
                 PotentialAppKey.delete_keys(device_auth_data_id=device_auth_obj.id, keys=pk_to_remove)
 
                 if len(correct_app_keys) > 1:
@@ -85,7 +81,7 @@ def process_packet(packet, policy):
                     data_collector_id = packet.data_collector_id,
                     organization_id = packet.organization_id,
                     join_request = packet.data,
-                    created_at = datetime.datetime.now(), 
+                    created_at = packet.date, 
                     join_request_packet_id = packet.id
                     )
                 device_auth_obj.save()
@@ -95,12 +91,9 @@ def process_packet(packet, policy):
         # Check when was the last time it was bruteforced and 
         # Try checking with the keys dictionary, the keys generated on the fly
         # and the keys uploaded by the corresponding organization
-        today = datetime.datetime.now()
-        device_auth_obj.created_at = device_auth_obj.created_at.replace(tzinfo=None)
+        elapsed = packet.date - device_auth_obj.created_at # Time in seconds
         
-        elapsed = today - device_auth_obj.created_at # Time in seconds
-        
-        if elapsed.seconds > 3600 * hours_betweeen_bruteforce_trials or never_bruteforced:
+        if elapsed > datetime.timedelta(hours=hours_betweeen_bruteforce_trials) or never_bruteforced or True:
             
             result = LorawanWrapper.testAppKeysWithJoinRequest(keys, packet.data, dontGenerateKeys)
             organization_keys = [bytes(app_key.key.upper(), encoding='utf-8') for app_key in AppKey.get_with(organization_id = packet.organization_id)]
@@ -111,7 +104,7 @@ def process_packet(packet, policy):
             key_tested = True
 
             # Update the last time it was bruteforced
-            device_auth_obj.created_at= datetime.datetime.now()
+            device_auth_obj.created_at=packet.date
 
             # If potential keys found...
             if result != "":
