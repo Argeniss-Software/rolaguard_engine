@@ -414,6 +414,19 @@ class GatewayToDevice(Base):
             session.rollback()
             log.error(f"Error trying to add GatewayToDevice: {exc}")
 
+    @classmethod
+    def delete(cls, gateway_id, device_id):
+        try:
+            row = session.query(GatewayToDevice).\
+                filter(cls.gateway_id == gateway_id).\
+                filter(cls.device_id == device_id).first()
+            if row is None:
+                raise Exception("Trying to erase a non existing row in GatewayToDevice")
+            session.delete(row)
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            log.error(f"Couldn't delete row: {exc}")
 
 
 class GatewayToDeviceSession(Base):
