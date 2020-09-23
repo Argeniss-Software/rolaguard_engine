@@ -214,14 +214,15 @@ class ResourceMeter():
             other_gws_hex_ids = set(self.device_stats[device.id]["gateway_id"].keys())
             gws_to_check = other_gws_hex_ids - current_gw_hex_id
             gws_to_del = []
-            disconnection_sensitivity = 1/policy_manager.get_parameters("LAF-401").get("disconnection_sensitivity")
+            disconnection_sensitivity = policy_manager.get_parameters("LAF-401").get("disconnection_sensitivity")
+            min_activity_period = policy_manager.get_parameters("LAF-401").get("min_activity_period")
+            device_freq = device.activity_freq or 0
 
             for gw_to_check in list(gws_to_check):
                 last_date = self.device_stats[device.id]["last_date"].get(gw_to_check)
                 if  last_date and\
-                    device.activity_freq and\
                     (packet.date - last_date).seconds >\
-                    disconnection_sensitivity * device.activity_freq:
+                    max(min_activity_period, device_freq/disconnection_sensitivity):
 
                     gws_to_del.append(gw_to_check)
 
