@@ -1,7 +1,7 @@
 import json, datetime, logging, os
 from analyzers.rolaguard_bruteforce_analyzer.lorawanwrapper import LorawanWrapper 
 from utils import emit_alert
-from db.Models import Device, DeviceAuthData, PotentialAppKey, Quarantine, AlertType
+from db.Models import Device, DeviceAuthData, PotentialAppKey, Quarantine, AlertType, AppKey
 
 
 device_auth_obj = None
@@ -34,28 +34,27 @@ def process_packet(packet, policy):
         
         # device_obj = ObjectInstantiator.get_or_error_device(packet)
         device_obj = Device.find_with(dev_eui=packet.dev_eui, data_collector_id=packet.data_collector_id)
+        if not device_obj: return
 
         # Before cracking with many different keys, try with a PotentialAppKey previously found. In case this key is valid, we are pretty sure that is the correct AppKey
         device_auth_obj = DeviceAuthData.find_one_by_device_id(device_obj.id)
         if device_auth_obj and extractMIC(device_auth_obj.join_request)!= packet.mic:
-            pot_app_keys = PotentialAppKey.find_all_by_device_auth_id(device_auth_obj.id)
+            pot_app_keys = [pk.app_key_hex for pk in PotentialAppKey.find_all_by_device_auth_id(device_auth_obj.id)]
 
             if len(pot_app_keys) > 0:
-                
-                keys_to_test=list()
-                
-                for pot_app_key in pot_app_keys:
-                    keys_to_test.append(bytes(pot_app_key.app_key_hex.rstrip().upper(), encoding='utf-8')) 
-
-                keys_to_test = list(dict.fromkeys(keys_to_test))
                 correct_app_keys = LorawanWrapper.testAppKeysWithJoinRequest(
-                    keys_to_test,
-                    packet.data,
+                    keys = [bytes(pk, encoding='utf-8') for pk in pot_app_keys],
+                    data = packet.data,
                     dontGenerateKeys = True).split()
+                correct_app_keys = [ak.upper().rstrip() for ak in correct_app_keys]
                 key_tested = True
 
+                pk_to_remove = [pk for pk in pot_app_keys if pk not in correct_app_keys]
+                PotentialAppKey.delete_keys(device_auth_data_id=device_auth_obj.id, keys=pk_to_remove)
+
                 if len(correct_app_keys) > 1:
-                    logging.warning("Found more than one possible keys for the device {0}. One of them should be the correct. Check it manually. Keys: {1}".format(packet.dev_eui, correct_app_keys))
+                    logging.warning(f"Found more than one possible keys for the device {packet.dev_eui}." +
+                                    f" One of them should be the correct. Check it manually. Keys: {correct_app_keys}")
                 elif len(correct_app_keys) == 1:
                     # AppKey found!!
                     device_auth_obj.second_join_request_packet_id = packet.id
@@ -82,7 +81,7 @@ def process_packet(packet, policy):
                     data_collector_id = packet.data_collector_id,
                     organization_id = packet.organization_id,
                     join_request = packet.data,
-                    created_at = datetime.datetime.now(), 
+                    created_at = packet.date, 
                     join_request_packet_id = packet.id
                     )
                 device_auth_obj.save()
@@ -90,19 +89,22 @@ def process_packet(packet, policy):
                 logging.error("Error trying to save DeviceAuthData at JoinRequest: {0}".format(exc))
         
         # Check when was the last time it was bruteforced and 
-        # Try checking with the keys dictionary and the keys generated on the fly
-        today = datetime.datetime.now()
-        device_auth_obj.created_at = device_auth_obj.created_at.replace(tzinfo=None)
+        # Try checking with the keys dictionary, the keys generated on the fly
+        # and the keys uploaded by the corresponding organization
+        elapsed = packet.date - device_auth_obj.created_at # Time in seconds
         
-        elapsed = today - device_auth_obj.created_at # Time in seconds
-        
-        if elapsed.seconds > 3600 * hours_betweeen_bruteforce_trials or never_bruteforced:
+        if elapsed > datetime.timedelta(hours=hours_betweeen_bruteforce_trials) or never_bruteforced or True:
             
             result = LorawanWrapper.testAppKeysWithJoinRequest(keys, packet.data, dontGenerateKeys)
+            organization_keys = [bytes(app_key.key.upper(), encoding='utf-8') for app_key in AppKey.get_with(organization_id = packet.organization_id)]
+            result_org_keys = LorawanWrapper.testAppKeysWithJoinRequest(organization_keys, packet.data, dontGenerateKeys = True)
+            if result_org_keys != "":
+                result += " " + result_org_keys
+
             key_tested = True
 
-            # Update the last time it was broteforced
-            device_auth_obj.created_at= datetime.datetime.now()
+            # Update the last time it was bruteforced
+            device_auth_obj.created_at=packet.date
 
             # If potential keys found...
             if result != "":
@@ -111,14 +113,14 @@ def process_packet(packet, policy):
                 device_auth_obj.join_request= packet.data
 
                 # Split string possibly containing keys separated by spaces
-                candidate_keys_array= result.split()
+                candidate_keys_array= set(result.split())
 
                 for hex_key in candidate_keys_array:
                     try:
                         # Save the potential app key if it does not exists already in the DB
                         potential_key_obj = PotentialAppKey.get_by_device_auth_data_and_hex_app_key(
                             device_auth_data_id = device_auth_obj.id,
-                            hex_app_key = hex_key.upper()
+                            app_key_hex = hex_key.upper()
                         )
                         if not potential_key_obj:
                             potential_key_obj = PotentialAppKey(
@@ -131,8 +133,6 @@ def process_packet(packet, policy):
                             potential_key_obj.save()
                     except Exception as exc:
                         logging.error("Error trying to save PotentialAppKey at JoinRequest: {0}".format(exc))           
-        else:
-            logging.debug("Skipping JoinRequest for DevEUI {2}. Elapsed {0} hours of {1}".format(elapsed.seconds/3600, hours_betweeen_bruteforce_trials, device_obj.dev_eui ))
     
     elif packet.m_type == "JoinAccept" and packet.data is not None:
 
@@ -193,20 +193,24 @@ def process_packet(packet, policy):
                 logging.error("Cracked a JoinAccept but no device_auth object found")
 
     if key_tested and len(result)==0 and is_on_quarantine("LAF-009", packet, device=device_obj):
-        alert_type = AlertType.find_one_by_code("LAF-009")
-        emit_alert(
-            "LAF-600",
-            packet,
-            device=device_obj,
-            alert_solved=alert_type.name,
-            alert_description=alert_type.description
-        )
-        Quarantine.remove_from_quarantine("LAF-009",
-                                          device_id = device_obj.id,
-                                          device_session_id = None,
-                                          data_collector_id = packet.data_collector_id,
-                                          res_reason_id = 3,
-                                          res_comment = "Appkey modified")
+        res_comment = "The AppKey was modified"
+        issue_solved = Quarantine.remove_from_quarantine(
+            "LAF-009",
+            device_id = device_obj.id,
+            device_session_id = None,
+            data_collector_id = packet.data_collector_id,
+            res_reason_id = 3,
+            res_comment = res_comment
+            )
+        if issue_solved:
+            emit_alert(
+                "LAF-600",
+                packet,
+                device = device_obj,
+                alert_solved_type = "LAF-009",
+                alert_solved = AlertType.find_one_by_code("LAF-009").name,
+                resolution_reason = res_comment
+            )
 
 
 def is_on_quarantine(alert_type, packet, device=None, device_session=None):

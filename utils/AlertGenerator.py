@@ -1,11 +1,22 @@
 import datetime, os, json, logging 
 from db.Models import Alert, Quarantine, Gateway, GatewayToDevice, GatewayToDeviceSession, Device, \
-    DeviceSession, AlertType, DataCollector
+    DeviceSession, AlertType, DataCollector, Packet
 from mq.AlertEvent import emit_alert_event
 
 
-quarantined_alerts = ["LAF-002", "LAF-006", "LAF-007", "LAF-009"]
+alert_blocked_by = {
+    "LAF-002" : ["LAF-002"],
+    "LAF-006" : ["LAF-006"],
+    "LAF-007" : ["LAF-007"], 
+    "LAF-009" : ["LAF-009"],
+    "LAF-100" : ["LAF-100"],
+    "LAF-101" : ["LAF-101"],
+    "LAF-404" : ["LAF-404"],
+    "LAF-501" : ["LAF-501", "LAF-404"],
+    "LAF-102" : ["LAF-102"]
+}
 
+gateway_alerts = ["LAF-010", "LAF-402", "LAF-403"]
 
 def emit_alert(alert_type, packet, device=None, device_session=None, gateway=None, device_auth_id=None, **custom_parameters):
     try:
@@ -24,6 +35,7 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
         parameters = {}
         parameters['packet_id'] = packet.id
         parameters['packet_date'] = packet.date.strftime('%Y-%m-%d %H:%M:%S')
+        parameters['packet_data'] = packet.to_json()
         parameters['created_at'] = now
         parameters['dev_eui'] = device.dev_eui if device and device.dev_eui else None
         parameters['dev_name'] = device.name if device and device.name else None
@@ -35,14 +47,30 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
 
         parameters.update(custom_parameters)
 
-        quarantine_row = None
-        if alert_type in quarantined_alerts:
-            quarantine_row = Quarantine.find_open_by_type_dev_coll(alert_type,
-                                                                   device.id if device else None,
-                                                                   device_session.id if device_session else None,
-                                                                   packet.data_collector_id)
-        on_quarantine = quarantine_row is not None   
+        if 'prev_packet_id' in custom_parameters:
+            prev_packet = Packet.find_one(custom_parameters['prev_packet_id'])
+            if prev_packet:
+                parameters['prev_packet_data'] = prev_packet.to_json()
 
+        global alert_blocked_by
+        issue = None
+        blocked = False
+        if alert_type in alert_blocked_by:
+            for blocking_issue in alert_blocked_by[alert_type]:
+                issue = Quarantine.find_open_by_type_dev_coll(
+                    blocking_issue,
+                    device.id if device else None,
+                    device_session.id if device_session else None,
+                    packet.data_collector_id
+                )
+                if issue:
+                    blocked = True
+                    break
+        
+        if alert_type in gateway_alerts:
+            device = None
+            device_session = None
+                                                        
         alert = Alert(
             type = alert_type,
             device_id = device.id if device and device.id else None,
@@ -53,12 +81,12 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
             created_at = now,
             packet_id = packet.id,
             parameters= json.dumps(parameters),
-            show = not on_quarantine)
+            show = not blocked)
         alert.save()
   
         # ReportAlert.print_alert(alert)
 
-        if not on_quarantine:
+        if not blocked:
             params = {
                 'data_collector_id': packet.data_collector_id,
                 'organization_id': packet.organization_id,
@@ -67,8 +95,9 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
             }
             emit_alert_event('NEW', params)
 
-        if alert_type in quarantined_alerts:
-            Quarantine.put_on_quarantine(alert=alert, quarantine_row=quarantine_row)
+        is_an_issue = any([alert_type in l for l in alert_blocked_by.values()])
+        if is_an_issue:
+            Quarantine.put_on_quarantine(alert=alert, quarantine_row=issue)
 
     except Exception as exc:
         logging.error(f"Error trying to emit alert {alert_type}: {exc}")
@@ -84,7 +113,7 @@ def print_alert(alert):
             message= message.replace('{'+param_name+'}', str(param_value))
         message= message.replace('{'+'packet_id'+'}', str(alert.packet_id))
         message= message.replace('{'+'created_at'+'}', alert.created_at.strftime('%Y-%m-%d %H:%M'))
-        collector= DataCollector.find_one(alert.data_collector_id)
+        collector= DataCollector.get(alert.data_collector_id)
         if collector:
             message= message.replace('{'+'collector.name'+'}', collector.name+' (ID '+str(collector.id)+')')
     except Exception as e:

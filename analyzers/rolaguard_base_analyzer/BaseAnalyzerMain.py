@@ -1,51 +1,90 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
-from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, DataCollectorToDevice, \
-    DataCollectorToDeviceSession, DataCollectorToGateway, Packet, DataCollector
+from collections import defaultdict
+from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
+    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType
 from utils import emit_alert
+from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
+from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
+from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
+
 from utils import Chronometer
-from db import session
 
 
+# TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
-last_uplink_mic= {}
+last_uplink_mic = {}
+jr_counters = defaultdict(lambda: 0)
 
+resource_meter = ResourceMeter()
+device_identifier = DeviceIdentifier()
+check_duplicated_session = CheckDuplicatedSession()
 
 chrono = Chronometer(report_every=1000)
 
 def process_packet(packet, policy):
     chrono.start("total")
 
+    chrono.start("dev id")
+    packet = device_identifier(packet)
+    chrono.stop()
+
+    chrono.start("search objs")
+    gateway = Gateway.find_with(gw_hex_id = packet.gateway, data_collector_id = packet.data_collector_id)
+    device = Device.find_with(dev_eui = packet.dev_eui, data_collector_id = packet.data_collector_id)
+    device_session = DeviceSession.find_with(dev_addr = packet.dev_addr, data_collector_id = packet.data_collector_id)
+    chrono.stop()
+
     chrono.start("instantiation")
     ## Gateway instantiation
-    gateway = Gateway.find_with(gw_hex_id = packet.gateway, data_collector_id = packet.data_collector_id)
     if gateway is None and packet.gateway:
         gateway = Gateway.create_from_packet(packet)
         gateway.save()
-        DataCollectorToGateway.associate(packet.data_collector_id, gateway.id)
         emit_alert("LAF-402", packet, gateway = gateway)
 
-    ## Session instantiation
-    device_session = DeviceSession.find_with(dev_addr = packet.dev_addr, data_collector_id = packet.data_collector_id)
-    if device_session is None and packet.dev_addr:
-        device_session = DeviceSession.create_from_packet(packet)
-        device_session.save()
-        DataCollectorToDeviceSession.associate(packet.data_collector_id, device_session.id)
-
     ## Device instantiation
-    device = Device.find_with(dev_eui = packet.dev_eui, data_collector_id = packet.data_collector_id)
     if device is None and packet.dev_eui:
         device = Device.create_from_packet(packet)
         device.save()
-        DataCollectorToDevice.associate(packet.data_collector_id, device.id)
+
+    ## Session instantiation
+    if device_session is None and packet.dev_addr:
+        device_session = DeviceSession.create_from_packet(packet)
+        device_session.save()
+        
+        if device:
+            issue_solved = Quarantine.remove_from_quarantine(
+                "LAF-404",
+                device_id = device.id,
+                device_session_id = None,
+                data_collector_id = packet.data_collector_id,
+                res_reason_id = 3,
+                res_comment = "Device connected"
+                )
+            if issue_solved:
+                emit_alert(
+                    "LAF-600",
+                    packet,
+                    device = device,
+                    alert_solved_type = "LAF-404",
+                    alert_solved = AlertType.find_one_by_code("LAF-404").name,
+                    resolution_reason = "Device connected"
+                )
+
+
+    ## Emit new device alert if it is the first data packet
+    if device and device_session and device.pending_first_connection:
+        device.pending_first_connection = False
+        device.db_update()
         if policy.is_enabled("LAF-400"):
             emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
-                        number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
+                    number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
+
     chrono.stop()
 
     ## Associations
     chrono.start("dev2sess")
     if device and gateway:
-        GatewayToDevice.associate(gateway.id, device.id)
+        GatewayToDevice.associate(gateway_id=gateway.id, device_id=device.id)
     chrono.stop()
 
     ## Associate device with device_session
@@ -73,14 +112,25 @@ def process_packet(packet, policy):
 
 
     chrono.start("checks")
-    ## Check alert LAF-400
-    if device and not device.connected and policy.is_enabled("LAF-400"):
-        emit_alert("LAF-400", packet, device=device, gateway=gateway,
-                    number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
+    ## Check alert
 
-    ## Check alert LAF-402
-    if gateway and not gateway.connected and policy.is_enabled("LAF-402"):
-            emit_alert("LAF-402", packet, gateway = gateway)
+    ## LAF-404
+    # The data_collector and dev_eui is used as UID to count JRs.
+    if packet.dev_eui:
+        if packet.m_type == 'JoinRequest':
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] += 1
+        else:
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] = 0
+
+        if (
+            policy.is_enabled("LAF-404") and
+            jr_counters[(packet.data_collector_id, packet.dev_eui)] > policy.get_parameters("LAF-404")["max_join_request_fails"]
+        ):
+            if device:
+                emit_alert("LAF-404", packet, device=device, gateway=gateway)
+            else:
+                log.warning(f"Device not found in DB when LAF-404 detected for device {packet.dev_eui} from data collector {packet.data_collector_id}")
+    
 
     ## Check alert LAF-010
     if gateway and policy.is_enabled("LAF-010"):
@@ -93,7 +143,7 @@ def process_packet(packet, policy):
                         new_latitude = packet.latitude,
                         new_longitude = packet.longitude)
 
-    if packet.m_type == "JoinRequest":
+    if packet.m_type == "JoinRequest" and device:
         # Check if DevNonce is repeated and save it
         prev_packet_id = DevNonce.saveIfNotExists(packet.dev_nonce, device.id, packet.id) 
         if prev_packet_id and (device.has_joined or device.join_inferred):
@@ -147,7 +197,7 @@ def process_packet(packet, policy):
                                             new_counter=packet.f_count,
                                             prev_packet_id=device_session.last_packet_id)
                         else:
-                            if policy.is_enabled("LAF-006"):
+                            if policy.is_enabled("LAF-006") and not device.is_otaa:
                                 emit_alert("LAF-006", packet,
                                             device=device,
                                             device_session=device_session,
@@ -164,27 +214,16 @@ def process_packet(packet, policy):
                                                     "Packet id %d"%(packet.id))
 
                     device_session.reset_counter += 1
-        
-        elif ( # Conditions to emit a LAF-007
-            # The policy is enabled
-            policy.is_enabled("LAF-007") and
-            # Have the last uplink mic for this device session
-            device_session.id in last_uplink_mic and
-            (
-                # Received a counter smaller than the expected
-                (packet.f_count < device_session.up_link_counter) or
-                # Or equal but with a different mic
-                ((packet.f_count == device_session.up_link_counter) and (last_uplink_mic[device_session.id] != packet.mic))
-            ) and
-            # To avoid errors when the counter overflows
-            (packet.f_count > 5 or device_session.up_link_counter < 65530)
-            ) :
-                emit_alert("LAF-007", packet, device=device, device_session=device_session, gateway=gateway,
-                            counter=device_session.up_link_counter,
-                            new_counter=packet.f_count,
-                            prev_packet_id=device_session.last_packet_id)
-
         last_uplink_mic[device_session.id]= packet.mic
+
+    check_duplicated_session(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy=policy
+        )
+
 
     chrono.stop()
 
@@ -193,7 +232,51 @@ def process_packet(packet, policy):
     if device_session: device_session.update_state(packet)
     if device: device.update_state(packet)
 
+    resource_meter(device, packet, policy)
+    resource_meter(gateway, packet, policy)
+    resource_meter.gc(packet.date)
+
+    ## Check alert LAF-100
+    if (
+        device and device.max_rssi is not None and \
+        device.max_rssi < policy.get_parameters("LAF-100")["minimum_rssi"]
+    ):
+        emit_alert(
+            "LAF-100", packet,
+            device = device,
+            device_session = device_session,
+            gateway = gateway,
+            rssi = device.max_rssi
+            )
+
+    ## Check alert LAF-101
+    if (
+        device and \
+        device.activity_freq is not None and device.npackets_lost is not None and \
+        device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
+    ):
+        emit_alert(
+            "LAF-101", packet,
+            device=device,
+            device_session=device_session,
+            gateway=gateway,
+            packets_lost=device.npackets_lost
+            )
+
+    ## Check alert LAF-102
+    if(
+        device and \
+        device.max_lsnr is not None and \
+        device.max_lsnr < policy.get_parameters("LAF-102")["minimum_lsnr"]
+    ):
+        emit_alert(
+            "LAF-102", 
+            packet=packet,
+            device=device,
+            device_session=device_session,
+            gateway=gateway,
+            lsnr=device.max_lsnr
+        )
+
     chrono.stop("total")
     chrono.lap()
-
-            

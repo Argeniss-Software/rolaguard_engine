@@ -1,8 +1,10 @@
+llvmlite==0.31.0
 paho-mqtt
 sqlalchemy
 psycopg2-binary
 python-dateutil
 pyod
 pika
-numpy<1.17
+numpy
 sklearn
+pandas

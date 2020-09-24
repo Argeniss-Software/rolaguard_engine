@@ -1,4 +1,5 @@
 import math
+import json
 import logging as log
 from sqlalchemy import Column, DateTime, String, Integer, BigInteger, SmallInteger, Float, Boolean, Interval,\
                        ForeignKey, func, asc, desc, func, LargeBinary, or_, Enum as SQLEnum
@@ -98,6 +99,11 @@ class Gateway(Base):
 
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=False)
+    activity_freq = Column(Float, nullable=True)
+    npackets_up = Column(Integer, nullable=False, default=0)
+    npackets_down = Column(Integer, nullable=False, default=0)
+
+    last_packet_id = Column(BigIntegerType, ForeignKey("packet.id"), nullable=True)
 
     @classmethod
     def create_from_packet(cls, packet):
@@ -119,8 +125,8 @@ class Gateway(Base):
         if gw_hex_id and data_collector_id:
             return session.query(Gateway).\
                 filter(Gateway.gw_hex_id == gw_hex_id).\
-                join(DataCollectorToGateway).\
-                filter(DataCollectorToGateway.data_collector_id == data_collector_id).first()
+                filter(Gateway.data_collector_id == data_collector_id).\
+                first()
         else:
             return None
 
@@ -141,8 +147,7 @@ class Gateway(Base):
             if packet.latitude and packet.longitude:
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
-            self.last_activity = packet.date
-            self.connected = True
+            self.last_packet_id = packet.id
         except Exception as exc:
             log.error(f"Error updating gateway {self.id}: {exc}")
 
@@ -197,11 +202,8 @@ class DataCollector(Base):
         return session.query(cls).filter(cls.data_collector_type_id == dctype_id, cls.name == name).first()
 
     @classmethod
-    def find_one(cls, id=None):
-        query = session.query(cls)
-        if id:
-            query = query.filter(cls.id == id)
-        return query.first()
+    def get(cls, id):
+        return session.query(cls).get(id)
 
     @classmethod
     def count(cls):
@@ -209,13 +211,14 @@ class DataCollector(Base):
 
     @classmethod
     def number_of_devices(cls, data_collector_id):
-        collector_devices = session.query(DataCollectorToDevice.device_id).\
-                        filter(DataCollectorToDevice.data_collector_id == data_collector_id).subquery()
-        query = session.query(Device.dev_eui).\
+        ndev = session.query(Device.dev_eui).\
                 filter(Device.connected).\
-                filter(Device.id.in_(collector_devices)).\
-                distinct()
-        return query.count()
+                filter(Device.data_collector_id == data_collector_id).\
+                distinct().count()
+        return ndev
+
+    def is_ttn(self):
+        return self.type.type == 'ttn_collector'
 
     def save(self):
         session.add(self)
@@ -251,6 +254,7 @@ class Device(Base):
     app_name = Column(String, nullable=True)
     join_eui = Column(String(16), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
+    data_collector_id = Column(BigInteger, ForeignKey("data_collector.id"), nullable=False)
     
     repeated_dev_nonce = Column(Boolean, nullable=True)
     join_request_counter = Column(Integer, nullable=False, default=0)
@@ -260,9 +264,21 @@ class Device(Base):
     is_otaa = Column(Boolean, nullable=True)
     last_packet_id = Column(BigIntegerType, ForeignKey("packet.id"), nullable=True)
 
+    pending_first_connection = Column(Boolean, nullable=False, default=True)
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
     activity_freq = Column(Float, nullable=True)
+    npackets_up = Column(Integer, nullable=False, default=0)
+    npackets_down = Column(Integer, nullable=False, default=0)
+    npackets_lost = Column(Float, nullable=False, default=0)
+    max_rssi = Column(Float, nullable=True)
+    max_lsnr = Column(Float, nullable=True)
+    ngateways_connected_to = Column(Integer, nullable=False, default=0)
+    payload_size = Column(Integer, nullable=True)
+
+    last_packets_list = Column(String(4096), nullable=True, default='[]')
+
+    MAX_PACKETS_LIST_SIZE = 200
 
     @classmethod
     def get(cls, id):
@@ -278,18 +294,20 @@ class Device(Base):
             join_eui = packet.join_eui,
             organization_id = packet.organization_id,
             last_packet_id = packet.id,
-            connected = True,
+            connected = "Up" in packet.m_type,
             app_name = packet.app_name,
-            last_activity = packet.date
+            last_activity = packet.date,
+            data_collector_id = packet.data_collector_id,
+            pending_first_connection = True,
+            last_packets_list = '[]'
             )
 
     @classmethod
     def find_with(cls, dev_eui, data_collector_id):
         if dev_eui and data_collector_id:
             return session.query(cls).\
-                filter(cls.dev_eui == dev_eui).\
-                join(DataCollectorToDevice).\
-                filter(DataCollectorToDevice.data_collector_id == data_collector_id).first()
+                filter(Device.dev_eui == dev_eui).\
+                filter(Device.data_collector_id == data_collector_id).first()
         else:
             return None
 
@@ -299,6 +317,9 @@ class Device(Base):
             session.commit()
         except Exception as exc:
             log.error(f"Error creating device: {exc}")
+
+    def db_update(cls):
+        session.commit()
         
     def update_state(self, packet):
         try:
@@ -310,9 +331,13 @@ class Device(Base):
             if packet.m_type == "JoinRequest":
                 self.join_request_counter += 1
                 self.is_otaa = True
-            self.last_activity = packet.date
-            self.connected = True
             self.last_packet_id = packet.id
+            if packet.m_type in ["UnconfirmedDataUp", "ConfirmedDataUp", "JoinRequest"]:
+                packets_list = json.loads(self.last_packets_list)
+                packets_list.append(packet.id)
+                while len(packets_list) > self.MAX_PACKETS_LIST_SIZE:
+                    packets_list.pop(0)
+                self.last_packets_list = json.dumps(packets_list)
         except Exception as exc:
             log.error(f"Error while updating device {self.dev_eui}: {exc}")
 
@@ -325,16 +350,12 @@ class DeviceVendorPrefix(Base):
 
     @classmethod
     def get_vendor_from_dev_eui(cls, dev_eui):
-        row = session.query(cls).filter(cls.prefix == dev_eui[0:6].upper()).first()
+        row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
         if not row:
             row = session.query(cls).filter(cls.prefix == dev_eui[0:7].upper()).first()
         if not row:
-            row = session.query(cls).filter(cls.prefix == dev_eui[0:9].upper()).first()
-
-        try:
-            return row.vendor
-        except:
-            return None
+            row = session.query(cls).filter(cls.prefix == dev_eui[0:6].upper()).first()
+        return row.vendor if row else None
 
 
 class DevNonce(Base):
@@ -393,6 +414,19 @@ class GatewayToDevice(Base):
             session.rollback()
             log.error(f"Error trying to add GatewayToDevice: {exc}")
 
+    @classmethod
+    def delete(cls, gateway_id, device_id):
+        try:
+            row = session.query(GatewayToDevice).\
+                filter(cls.gateway_id == gateway_id).\
+                filter(cls.device_id == device_id).first()
+            if row is None:
+                raise Exception("Trying to erase a non existing row in GatewayToDevice")
+            session.delete(row)
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            log.error(f"Couldn't delete row: {exc}")
 
 
 class GatewayToDeviceSession(Base):
@@ -436,6 +470,7 @@ class DeviceSession(Base):
 
     device_id = Column(BigIntegerType, ForeignKey("device.id"), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
+    data_collector_id = Column(BigInteger, ForeignKey("data_collector.id"), nullable=False)
     device_auth_data_id = Column(BigIntegerType, ForeignKey("device_auth_data.id"), nullable=True)
     # This is the last uplink packet ID
     last_packet_id = Column(BigIntegerType, ForeignKey("packet.id"), nullable=True)
@@ -454,16 +489,19 @@ class DeviceSession(Base):
             up_link_counter = 0,
             organization_id = packet.organization_id,
             connected = True,
-            last_activity = packet.date
+            last_activity = packet.date,
+            data_collector_id = packet.data_collector_id
         )
 
     @classmethod
-    def find_with(cls, dev_addr, data_collector_id):
+    def find_with(cls, dev_addr=None, data_collector_id=None, device_id=None):
         if dev_addr and data_collector_id:
             return session.query(cls).\
                 filter(cls.dev_addr == dev_addr).\
-                join(DataCollectorToDeviceSession).\
-                filter(DataCollectorToDeviceSession.data_collector_id == data_collector_id).first()
+                filter(cls.data_collector_id == data_collector_id).first()
+        elif device_id:
+            return session.query(cls).\
+                filter(cls.device_id == device_id).first()
         else:
             return None
 
@@ -479,7 +517,6 @@ class DeviceSession(Base):
             if packet.f_count is not None:
                 self.up_link_counter = packet.f_count
             self.last_packet_id = packet.id
-        self.connected = True
         self.last_activity = packet.date
 
 
@@ -669,11 +706,26 @@ class PotentialAppKey(Base):
         return session.query(cls).filter(cls.device_auth_data_id == dev_auth_data_id).all()
 
     @classmethod
+    def delete_keys(cls, device_auth_data_id, keys):
+        delete_query = cls.__table__.delete().\
+            where(cls.device_auth_data_id == device_auth_data_id).\
+            where(cls.app_key_hex.in_(keys))
+        session.execute(delete_query)
+
+    @classmethod
     def get_by_device_auth_data_and_hex_app_key(cls, device_auth_data_id, app_key_hex):
         return session.query(cls).filter(cls.device_auth_data_id == device_auth_data_id).\
                                   filter(cls.app_key_hex == app_key_hex).first()
 
+class AppKey(Base):
+    __tablename__ = 'app_key'
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    key = Column(String(32), nullable=False)
+    organization_id = Column(BigInteger, ForeignKey("organization.id"), nullable=True)
 
+    @classmethod
+    def get_with(cls, organization_id):
+        return session.query(cls).filter(cls.organization_id == organization_id)
 
 class RowProcessed(Base):
     __tablename__ = 'row_processed'
@@ -699,76 +751,6 @@ class RowProcessed(Base):
     def save_and_flush(self):
         session.add(self)
         session.flush()
-
-
-class DataCollectorToGateway(Base):
-    __tablename__ = 'data_collector_to_gateway'
-    data_collector_id = Column(BigIntegerType, ForeignKey("data_collector.id"), nullable=False, primary_key=True)
-    gateway_id = Column(BigIntegerType, ForeignKey("gateway.id"), nullable=False, primary_key=True)
-
-    @classmethod
-    def associate(cls, data_collector_id, gateway_id):
-        try:
-            row = session.query(cls).\
-                filter(cls.data_collector_id == data_collector_id).\
-                filter(cls.gateway_id == gateway_id).first()
-            if row is None:
-                row = cls(
-                    data_collector_id = data_collector_id,
-                    gateway_id = gateway_id
-                )
-                session.add(row)
-                session.commit()
-        except Exception as exc:
-            session.rollback()
-            log.error(f"Error trying to add DataCollectorToGateway: {exc}")
-
-
-class DataCollectorToDevice(Base):
-    __tablename__ = 'data_collector_to_device'
-    data_collector_id = Column(BigIntegerType, ForeignKey("data_collector.id"), nullable=False, primary_key=True)
-    device_id = Column(BigIntegerType, ForeignKey("device.id"), nullable=False, primary_key=True)
-
-    @classmethod
-    def associate(cls, data_collector_id, device_id):
-        try:
-            row = session.query(cls).\
-                filter(cls.data_collector_id == data_collector_id).\
-                filter(cls.device_id == device_id).first()
-            if row is None:
-                row = cls(
-                    data_collector_id = data_collector_id,
-                    device_id = device_id
-                )
-                session.add(row)
-                session.commit()
-        except Exception as exc:
-            session.rollback()
-            log.error(f"Error trying to add DataCollectorToDevice: {exc}")
-
-
-
-class DataCollectorToDeviceSession(Base):
-    __tablename__ = 'data_collector_to_device_session'
-    data_collector_id = Column(BigIntegerType, ForeignKey("data_collector.id"), nullable=False, primary_key=True)
-    device_session_id = Column(BigIntegerType, ForeignKey("device_session.id"), nullable=False, primary_key=True)
-
-    @classmethod
-    def associate(cls, data_collector_id, device_session_id):
-        try:
-            row = session.query(cls).\
-                filter(cls.data_collector_id == data_collector_id).\
-                filter(cls.device_session_id == device_session_id).first()
-            if row is None:
-                row = cls(
-                    data_collector_id = data_collector_id,
-                    device_session_id = device_session_id
-                )
-                session.add(row)
-                session.commit()
-        except Exception as exc:
-            session.rollback()
-            log.error(f"Error trying to add DataCollectorToDeviceSession: {exc}")
 
 
 class Organization(Base):
@@ -802,6 +784,9 @@ class PolicyItem(Base):
     alert_type_code = Column(String(20), ForeignKey("alert_type.code"), nullable=False)
     alert_type = relationship("AlertType", lazy="joined")
 
+    def db_update(self):
+        session.commit()
+
     @classmethod
     def find_one(cls, id):
         return session.query(cls).get(id)
@@ -815,6 +800,24 @@ class Policy(Base):
     organization_id = Column(BigInteger, ForeignKey("organization.id"), nullable=True)
     is_default = Column(Boolean, nullable=False)
     data_collectors = relationship("DataCollector", lazy="joined")
+
+    def add_missing_item(self, alert_type_code):
+        """
+        Add new policy item, with default parameters, 
+        for this policy and this alert type.
+        Returns the corresponding default parameters.
+        """
+        alert_type = AlertType.find_one_by_code(alert_type_code)
+        parameters = json.loads(alert_type.parameters)
+        parameters = {par : val['default'] for par, val in parameters.items()}
+
+        session.add(PolicyItem(
+            policy_id=self.id,
+            alert_type_code=alert_type.code,
+            enabled=True,
+            parameters=json.dumps(parameters)))
+        session.commit()
+        return parameters
 
     @classmethod
     def find(cls, organization_id=None):
@@ -901,6 +904,14 @@ class Quarantine(Base):
         session.add(self)
         session.commit()
 
+    def resolve(self, reason_id, comment, resolved_by_id=None, commit=True):
+        self.resolved_at = datetime.now()
+        self.resolved_by_id = resolved_by_id
+        self.resolution_reason_id = reason_id
+        self.resolution_comment = comment
+        if commit:
+            session.commit()
+
     @classmethod
     def find_by_id(cls, id):
         return session.query(cls).filter(cls.id == id).first()
@@ -920,14 +931,18 @@ class Quarantine(Base):
         return cls.find_open_by_type_dev_coll(alert.type, alert.device_id, alert.device_session_id, alert.data_collector_id)
 
     @classmethod
-    def find_open_by_type_dev_coll(cls, alert_type, device_id, device_session_id, data_collector_id):
+    def find_open_by_type_dev_coll(cls, alert_type, device_id=None, device_session_id=None, data_collector_id=None, returnAll=False, gateway_id=None):
         q = session.query(cls).join(Alert).filter(Alert.type == alert_type, cls.resolved_at == None)
         if device_id:
             q = q.filter(Alert.device_id == device_id)
+        if gateway_id:
+            q = q.filter(Alert.gateway_id == gateway_id)
         if device_session_id:
             q = q.filter(Alert.device_session_id == device_session_id)
         if data_collector_id:
             q = q.filter(Alert.data_collector_id == data_collector_id)
+        if returnAll:
+            return q.all()
         return q.first()
 
     @classmethod
@@ -965,20 +980,24 @@ class Quarantine(Base):
         reason = QuarantineResolutionReason.find_by_type(QuarantineResolutionReasonType.MANUAL)
         if not reason:
             raise RuntimeError(f'Manual quarantine resolution type not found')
-        qRec.resolved_at = datetime.now()
-        qRec.resolved_by_id = user_id
-        qRec.resolution_reason_id = reason.id
-        qRec.resolution_comment = res_comment
-        session.commit()
+        qRec.resolve(
+            resolved_by_id=user_id,
+            reason_id=reason.id,
+            comment=res_comment,
+            commit=True
+        )
 
     @classmethod
     def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment):
         qrec = cls.find_open_by_type_dev_coll(alert_type, device_id, device_session_id, data_collector_id)
         if qrec:
-            qrec.resolved_at = datetime.now()
-            qrec.resolution_reason_id = res_reason_id
-            qrec.resolution_comment = res_comment
-            session.commit()
+            qrec.resolve(
+                reason_id=res_reason_id,
+                comment=res_comment,
+                commit=True
+            )
+            return True
+        return False
 
 
 Base.metadata.create_all(engine)

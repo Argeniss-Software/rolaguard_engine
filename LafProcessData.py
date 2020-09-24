@@ -88,8 +88,6 @@ def processData():
                 start_packet_id += BATCH_LENGTH
 
             else:
-                log.debug(f"Starting from packet {start_packet_id}, total packets {number_of_packets}. " \
-                           "No more packets to process, sleeping a while")
                 time.sleep(5)
                 continue
         else:
