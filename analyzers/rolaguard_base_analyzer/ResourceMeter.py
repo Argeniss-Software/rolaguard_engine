@@ -111,7 +111,7 @@ class ResourceMeter():
             if device.activity_freq:
                 freq_diff = time_diff - device.activity_freq
                 device.activity_freq = device.activity_freq + (1-self.maw) * freq_diff
-                device.activity_freq_variance = self.maw * (device.activity_freq_variance + (1-self.maw)*(freq_diff**2))
+                device.activity_freq_variance = self.maw * device.activity_freq_variance + (1-self.maw)*(freq_diff**2)
             else:
                 device.activity_freq = time_diff
                 device.activity_freq_variance = 0
