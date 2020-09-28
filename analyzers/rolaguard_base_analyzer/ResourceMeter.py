@@ -74,7 +74,7 @@ class ResourceMeter():
         device.npackets_down += 1 if not packet.uplink else 0
 
         if packet.uplink and self.device_stats[device.id]["last_fcount"]:
-            device.last_activity = packet.date.strftime(DATE_FORMAT)
+            device.last_activity = packet.date
 
             # If device is reconnecting, then resolve every "not transmitting"
             # issue for this device, with reason_id 0 (problem solved automatically)
