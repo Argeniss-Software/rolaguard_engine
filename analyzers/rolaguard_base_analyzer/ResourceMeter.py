@@ -1,4 +1,4 @@
-from db.Models import Device, Gateway, Quarantine, AlertType, GatewayToDevice, DATE_FORMAT
+from db.Models import Device, Gateway, Quarantine, AlertType, GatewayToDevice
 from datetime import date
 from utils import emit_alert
 import logging
