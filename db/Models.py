@@ -98,6 +98,7 @@ class Gateway(Base):
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
 
     connected = Column(Boolean, nullable=False, default=True)
+    first_activity = Column(DateTime(timezone=True), nullable=True)
     last_activity = Column(DateTime(timezone=True), nullable=False)
     activity_freq = Column(Float, nullable=True)
     npackets_up = Column(Integer, nullable=False, default=0)
@@ -117,7 +118,8 @@ class Gateway(Base):
             data_collector_id = packet.data_collector_id,
             organization_id = packet.organization_id,
             connected = True,
-            last_activity = packet.date
+            last_activity = packet.date,
+            first_activity = packet.date
         )
 
     @classmethod
@@ -266,6 +268,7 @@ class Device(Base):
 
     pending_first_connection = Column(Boolean, nullable=False, default=True)
     connected = Column(Boolean, nullable=False, default=True)
+    first_activity = Column(DateTime(timezone=True), nullable=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
     activity_freq = Column(Float, nullable=True)
     npackets_up = Column(Integer, nullable=False, default=0)
@@ -287,6 +290,7 @@ class Device(Base):
     @classmethod
     def create_from_packet(cls, packet):
         vendor = DeviceVendorPrefix.get_vendor_from_dev_eui(packet.dev_eui)
+        uplink = packet.m_type in ["UnconfirmedDataUp", "ConfirmedDataUp", "JoinRequest"]
         return Device(
             dev_eui = packet.dev_eui,
             name = packet.dev_name,
@@ -297,6 +301,7 @@ class Device(Base):
             connected = "Up" in packet.m_type,
             app_name = packet.app_name,
             last_activity = packet.date,
+            first_activity = packet.date if uplink else None,
             data_collector_id = packet.data_collector_id,
             pending_first_connection = True,
             last_packets_list = '[]'
@@ -338,6 +343,8 @@ class Device(Base):
                 while len(packets_list) > self.MAX_PACKETS_LIST_SIZE:
                     packets_list.pop(0)
                 self.last_packets_list = json.dumps(packets_list)
+                if self.first_activity is None:
+                    self.first_activity = packet.date
         except Exception as exc:
             log.error(f"Error while updating device {self.dev_eui}: {exc}")
 
