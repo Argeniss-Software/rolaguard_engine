@@ -1,6 +1,6 @@
 import datetime, os, json, logging 
 from db.Models import Alert, Quarantine, Gateway, GatewayToDevice, GatewayToDeviceSession, Device, \
-    DeviceSession, AlertType, DataCollector, Packet
+    DeviceSession, AlertType, DataCollector, Packet, DATE_FORMAT
 from mq.AlertEvent import emit_alert_event
 
 
@@ -32,10 +32,10 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
     except Exception as exc:
         logging.error(f"Error guessing device/gateway/session to emit alert: {exc}")
     try:
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.datetime.now().strftime(DATE_FORMAT)
         parameters = {}
         parameters['packet_id'] = packet.id
-        parameters['packet_date'] = packet.date.strftime('%Y-%m-%d %H:%M:%S')
+        parameters['packet_date'] = packet.date.strftime(DATE_FORMAT)
         parameters['packet_data'] = packet.to_json()
         parameters['created_at'] = now
         parameters['dev_eui'] = device.dev_eui if device and device.dev_eui else None

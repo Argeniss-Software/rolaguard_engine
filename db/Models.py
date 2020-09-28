@@ -12,7 +12,7 @@ from datetime import datetime
 BigIntegerType = BigInteger()
 BigIntegerType = BigIntegerType.with_variant(postgresql.BIGINT(), 'postgresql')
 BigIntegerType = BigIntegerType.with_variant(sqlite.INTEGER(), 'sqlite')
-
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S%z"
 
 class AlertType(Base):
     __tablename__ = 'alert_type'
@@ -571,7 +571,7 @@ class Packet(Base):
     def to_json(self):
         return {
             'id': self.id,
-            'date': "{}".format(self.date),
+            'date': self.date.strftime(DATE_FORMAT),
             'topic': self.topic,
             'data_collector_id': self.data_collector_id,
             'organization_id': self.organization_id,
