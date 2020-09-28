@@ -268,6 +268,7 @@ class Device(Base):
     connected = Column(Boolean, nullable=False, default=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
     activity_freq = Column(Float, nullable=True)
+    activity_freq_variance = Column(Float, nullable=False, default=0)
     npackets_up = Column(Integer, nullable=False, default=0)
     npackets_down = Column(Integer, nullable=False, default=0)
     npackets_lost = Column(Float, nullable=False, default=0)

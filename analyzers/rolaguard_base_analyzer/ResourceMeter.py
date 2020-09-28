@@ -105,13 +105,16 @@ class ResourceMeter():
                 del self.device_stats[device.id]
                 return False
 
-            # Update activity_freq (which is the time between packets)
+            # Update activity_freq (which is the time between packets) and activity_freq_variance
             most_recent_date = (max(self.device_stats[device.id]["last_date"].values())) if self.device_stats[device.id].get("last_date") else packet.date 
             time_diff = (packet.date - most_recent_date).seconds / count_diff
             if device.activity_freq:
-                device.activity_freq = self.maw * device.activity_freq + (1-self.maw) * time_diff
+                freq_diff = time_diff - device.activity_freq
+                device.activity_freq = device.activity_freq + (1-self.maw) * freq_diff
+                device.activity_freq_variance = self.maw * device.activity_freq_variance + (1-self.maw)*(freq_diff**2)
             else:
                 device.activity_freq = time_diff
+                device.activity_freq_variance = 0
 
             # Update the mean number of packets lost
             if device.npackets_lost:
