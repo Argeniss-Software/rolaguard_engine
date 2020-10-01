@@ -39,7 +39,13 @@ def process_packet(packet, policy):
     if gateway is None and packet.gateway:
         gateway = Gateway.create_from_packet(packet)
         gateway.save()
-        emit_alert("LAF-402", packet, gateway = gateway)
+        if policy.is_enabled("LAF-402"):
+            emit_alert("LAF-402", packet, gateway = gateway)
+
+    ## Device instantiation
+    if device is None and packet.dev_eui:
+        device = Device.create_from_packet(packet)
+        device.save()
 
     ## Device instantiation
     if device is None and packet.dev_eui:
@@ -239,6 +245,7 @@ def process_packet(packet, policy):
     ## Check alert LAF-100
     if (
         device and device.max_rssi is not None and \
+        policy.is_enabled("LAF-100") and \
         device.max_rssi < policy.get_parameters("LAF-100")["minimum_rssi"]
     ):
         emit_alert(
@@ -253,6 +260,7 @@ def process_packet(packet, policy):
     if (
         device and \
         device.activity_freq is not None and device.npackets_lost is not None and \
+        policy.is_enabled("LAF-101") and \
         device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
     ):
         emit_alert(
@@ -267,6 +275,7 @@ def process_packet(packet, policy):
     if(
         device and \
         device.max_lsnr is not None and \
+        policy.is_enabled("LAF-102") and \
         device.max_lsnr < policy.get_parameters("LAF-102")["minimum_lsnr"]
     ):
         emit_alert(

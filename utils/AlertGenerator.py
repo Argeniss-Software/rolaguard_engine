@@ -1,22 +1,23 @@
 import datetime, os, json, logging 
 from db.Models import Alert, Quarantine, Gateway, GatewayToDevice, GatewayToDeviceSession, Device, \
-    DeviceSession, AlertType, DataCollector, Packet
+    DeviceSession, AlertType, DataCollector, Packet, DATE_FORMAT
 from mq.AlertEvent import emit_alert_event
 
 
 alert_blocked_by = {
-    "LAF-002" : ["LAF-002"],
-    "LAF-006" : ["LAF-006"],
-    "LAF-007" : ["LAF-007"], 
-    "LAF-009" : ["LAF-009"],
-    "LAF-100" : ["LAF-100"],
-    "LAF-101" : ["LAF-101"],
-    "LAF-404" : ["LAF-404"],
-    "LAF-501" : ["LAF-501", "LAF-404"],
-    "LAF-102" : ["LAF-102"]
+    "LAF-002" : ["LAF-002"],            # Devices sharing the same DevAddr
+    "LAF-006" : ["LAF-006"],            # Possible ABP device
+    "LAF-007" : ["LAF-007"],            # Possible duplicated sessions 
+    "LAF-009" : ["LAF-009"],            # Easy to guess key
+    "LAF-010" : ["LAF-010"],            # Gateway changed location
+    "LAF-100" : ["LAF-100"],            # Device signal intensity below threshold
+    "LAF-102" : ["LAF-102"],            # Device signal to noise ratio below threshold
+    "LAF-101" : ["LAF-101"],            # Device losing many packets
+    "LAF-404" : ["LAF-404"],            # Device failed to join
+    "LAF-501" : ["LAF-501", "LAF-404"], # Anomaly in Join Requests frequency -> Device failed to join 
 }
 
-gateway_alerts = ["LAF-010", "LAF-402", "LAF-403"]
+gateway_alerts = ["LAF-010", "LAF-402", "LAF-403"] # Gateway changed location, New gateway found, Gateway connection lost
 
 def emit_alert(alert_type, packet, device=None, device_session=None, gateway=None, device_auth_id=None, **custom_parameters):
     try:
@@ -31,10 +32,10 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
     except Exception as exc:
         logging.error(f"Error guessing device/gateway/session to emit alert: {exc}")
     try:
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.datetime.now().strftime(DATE_FORMAT)
         parameters = {}
         parameters['packet_id'] = packet.id
-        parameters['packet_date'] = packet.date.strftime('%Y-%m-%d %H:%M:%S')
+        parameters['packet_date'] = packet.date.strftime(DATE_FORMAT)
         parameters['packet_data'] = packet.to_json()
         parameters['created_at'] = now
         parameters['dev_eui'] = device.dev_eui if device and device.dev_eui else None
@@ -55,22 +56,23 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
         global alert_blocked_by
         issue = None
         blocked = False
+
+        if alert_type in gateway_alerts:
+            device = None
+            device_session = None
+
         if alert_type in alert_blocked_by:
             for blocking_issue in alert_blocked_by[alert_type]:
                 issue = Quarantine.find_open_by_type_dev_coll(
-                    blocking_issue,
-                    device.id if device else None,
-                    device_session.id if device_session else None,
-                    packet.data_collector_id
+                    alert_type=blocking_issue,
+                    device_id=device.id if device else None,
+                    device_session_id=device_session.id if device_session else None,
+                    data_collector_id=packet.data_collector_id
                 )
                 if issue:
                     blocked = True
                     break
         
-        if alert_type in gateway_alerts:
-            device = None
-            device_session = None
-                                                        
         alert = Alert(
             type = alert_type,
             device_id = device.id if device and device.id else None,
