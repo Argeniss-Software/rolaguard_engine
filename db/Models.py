@@ -367,6 +367,15 @@ class DeviceCounters(Base):
     value = Column(BigInteger, nullable=False, default=0)
     last_update = Column(DateTime(timezone=True), nullable=False)
 
+
+class GatewayCounters(Base):
+    __tablename__ = 'gateway_counters'
+    device_id = Column(BigInteger, ForeignKey("gateway.id"), nullable=False)
+    counter_type = Column(SQLEnum(CounterType), nullable=False)
+    hour_of_day = Column(Integer, nullable=False)
+    value = Column(BigInteger, nullable=False, default=0)
+    last_update = Column(DateTime(timezone=True), nullable=False)
+
     
 class DeviceVendorPrefix(Base):
     __tablename__ = 'device_vendor_prefix'
