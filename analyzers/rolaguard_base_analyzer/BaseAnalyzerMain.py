@@ -47,6 +47,11 @@ def process_packet(packet, policy):
         device = Device.create_from_packet(packet)
         device.save()
 
+    ## Device instantiation
+    if device is None and packet.dev_eui:
+        device = Device.create_from_packet(packet)
+        device.save()
+
     ## Session instantiation
     if device_session is None and packet.dev_addr:
         device_session = DeviceSession.create_from_packet(packet)
