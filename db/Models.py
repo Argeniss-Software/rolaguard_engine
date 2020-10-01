@@ -359,6 +359,15 @@ class CounterType(Enum):
     RETRANSMISSIONS = 'RETRANSMISSIONS'
 
 
+class DeviceCounters(Base):
+    __tablename__ = 'device_counters'
+    device_id = Column(BigInteger, ForeignKey("device.id"), nullable=False)
+    counter_type = Column(SQLEnum(CounterType), nullable=False)
+    hour_of_day = Column(Integer, nullable=False)
+    value = Column(BigInteger, nullable=False, default=0)
+    last_update = Column(DateTime(timezone=True), nullable=False)
+
+    
 class DeviceVendorPrefix(Base):
     __tablename__ = 'device_vendor_prefix'
     id = Column(BigIntegerType, primary_key=True)
