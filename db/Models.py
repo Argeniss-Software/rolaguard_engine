@@ -349,7 +349,16 @@ class Device(Base):
         except Exception as exc:
             log.error(f"Error while updating device {self.dev_eui}: {exc}")
 
-    
+
+class CounterType(Enum):
+    PACKETS_UP = 'PACKETS_UP'
+    PACKETS_DOWN = 'PACKETS_DOWN'
+    PACKETS_LOST = 'PACKETS_LOST'
+    JOIN_REQUESTS = 'JOIN_REQUESTS'
+    FAILED_JOIN_REQUESTS = 'FAILED_JOIN_REQUESTS'
+    RETRANSMISSIONS = 'RETRANSMISSIONS'
+
+
 class DeviceVendorPrefix(Base):
     __tablename__ = 'device_vendor_prefix'
     id = Column(BigIntegerType, primary_key=True)
