@@ -346,6 +346,7 @@ class Device(Base):
                 self.last_packets_list = json.dumps(packets_list)
                 if self.first_activity is None:
                     self.first_activity = packet.date
+            DeviceCounters.upsert_counters(device = self, packet = packet)
         except Exception as exc:
             log.error(f"Error while updating device {self.dev_eui}: {exc}")
 
@@ -361,11 +362,73 @@ class CounterType(Enum):
 
 class DeviceCounters(Base):
     __tablename__ = 'device_counters'
-    device_id = Column(BigInteger, ForeignKey("device.id"), nullable=False)
-    counter_type = Column(SQLEnum(CounterType), nullable=False)
-    hour_of_day = Column(Integer, nullable=False)
+    device_id = Column(BigInteger, ForeignKey("device.id"), nullable=False, primary_key=True)
+    counter_type = Column(SQLEnum(CounterType), nullable=False, primary_key=True)
+    hour_of_day = Column(Integer, nullable=False, primary_key=True)
     value = Column(BigInteger, nullable=False, default=0)
     last_update = Column(DateTime(timezone=True), nullable=False)
+
+    @classmethod
+    def upsert_counters(cls, device, packet):
+        if not packet.date or packet.is_repeated or packet.m_type == "JoinAccept":
+            return
+
+        if packet.m_type == "JoinRequest":
+            cls.upsert_counter(device_id=device.id, packet_date=packet.date, counter_type=CounterType.JOIN_REQUESTS)
+            if packet.failed_jr_found:
+                cls.upsert_counter(device_id=device.id, packet_date=packet.date, counter_type=CounterType.FAILED_JOIN_REQUESTS)
+            return
+        
+        if packet.uplink:
+            cls.upsert_counter(device_id=device.id, packet_date=packet.date, counter_type=CounterType.PACKETS_UP)
+            if packet.is_retransmission:
+                cls.upsert_counter(device_id=device.id, packet_date=packet.date, counter_type=CounterType.RETRANSMISSIONS)
+            if packet.npackets_lost_found > 0:
+                cls.upsert_counter(device_id=device.id, packet_date=packet.date, counter_type=CounterType.PACKETS_LOST, delta=packet.npackets_lost_found)
+        else:
+            cls.upsert_counter(device_id=device.id, packet_date=packet.date, counter_type=CounterType.PACKETS_DOWN)
+        return
+    
+    @classmethod
+    def upsert_counter(cls, device_id, packet_date, counter_type, delta=1, commit=False):
+        counters = session.query(cls).filter(
+            cls.device_id == device_id,
+            cls.counter_type == counter_type,
+            cls.hour_of_day ==  packet_date.hour
+        ).all()
+
+        if len(counters) > 1:
+            log.error(f"More than one counter found for device_id={device_id}, packet_date={packet_date}, counter_type={counter_type}")
+            return
+
+        curCounter = None
+        if len(counters) == 1:
+            curCounter = counters[0]
+
+        # Insert if doesn't exist or update the counter
+        if curCounter is None:
+            session.add(DeviceCounters(
+                device_id = device_id,
+                counter_type = counter_type,
+                hour_of_day = packet_date.hour,
+                value = delta,
+                last_update = packet_date
+            ))
+        else:
+            if( # If the counter is outdated, then reset it
+                packet_date.year != curCounter.last_update.year or \
+                packet_date.month != curCounter.last_update.month or \
+                packet_date.day != curCounter.last_update.day
+            ):
+                curCounter.value = 0
+
+            curCounter.value += delta
+            curCounter.last_update = packet_date
+
+        if commit:
+            session.commit()
+        
+        return
 
 
 class GatewayCounters(Base):
