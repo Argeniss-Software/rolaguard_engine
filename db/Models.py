@@ -150,6 +150,7 @@ class Gateway(Base):
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
             self.last_packet_id = packet.id
+            GatewayCounters.upsert_counters(gateway = self, packet = packet)
         except Exception as exc:
             log.error(f"Error updating gateway {self.id}: {exc}")
 
@@ -433,12 +434,64 @@ class DeviceCounters(Base):
 
 class GatewayCounters(Base):
     __tablename__ = 'gateway_counters'
-    device_id = Column(BigInteger, ForeignKey("gateway.id"), nullable=False)
-    counter_type = Column(SQLEnum(CounterType), nullable=False)
-    hour_of_day = Column(Integer, nullable=False)
+    gateway_id = Column(BigInteger, ForeignKey("gateway.id"), nullable=False, primary_key=True)
+    counter_type = Column(SQLEnum(CounterType), nullable=False, primary_key=True)
+    hour_of_day = Column(Integer, nullable=False, primary_key=True)
     value = Column(BigInteger, nullable=False, default=0)
     last_update = Column(DateTime(timezone=True), nullable=False)
 
+    @classmethod
+    def upsert_counters(cls, gateway, packet):
+        if not packet.date or packet.m_type in ["JoinRequest", "JoinAccept"]:
+            return
+        
+        if packet.uplink:
+            cls.upsert_counter(gateway_id=gateway.id, packet_date=packet.date, counter_type=CounterType.PACKETS_UP)
+        else:
+            cls.upsert_counter(gateway_id=gateway.id, packet_date=packet.date, counter_type=CounterType.PACKETS_DOWN)
+        return
+
+    @classmethod
+    def upsert_counter(cls, gateway_id, packet_date, counter_type, delta=1, commit=False):
+        counters = session.query(cls).filter(
+            cls.gateway_id == gateway_id,
+            cls.counter_type == counter_type,
+            cls.hour_of_day ==  packet_date.hour
+        ).all()
+
+        if len(counters) > 1:
+            log.error(f"More than one counter found for gateway_id={gateway_id}, packet_date={packet_date}, counter_type={counter_type}")
+            return
+
+        curCounter = None
+        if len(counters) == 1:
+            curCounter = counters[0]
+
+        # Insert if doesn't exist or update the counter
+        if curCounter is None:
+            session.add(GatewayCounters(
+                gateway_id = gateway_id,
+                counter_type = counter_type,
+                hour_of_day = packet_date.hour,
+                value = delta,
+                last_update = packet_date
+            ))
+        else:
+            if( # If the counter is outdated, then reset it
+                packet_date.year != curCounter.last_update.year or \
+                packet_date.month != curCounter.last_update.month or \
+                packet_date.day != curCounter.last_update.day
+            ):
+                curCounter.value = 0
+
+            curCounter.value += delta
+            curCounter.last_update = packet_date
+
+        if commit:
+            session.commit()
+        
+        return
+        
     
 class DeviceVendorPrefix(Base):
     __tablename__ = 'device_vendor_prefix'
