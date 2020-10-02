@@ -602,6 +602,12 @@ class Packet(Base):
     dev_name = Column(String(100), nullable=True)
     gw_name= Column(String(120), nullable=True)
 
+    is_repeated = False
+    is_retransmission = False
+    failed_jr_found = False
+    uplink = False
+    npackets_lost_found = 0
+
     def to_json(self):
         return {
             'id': self.id,
