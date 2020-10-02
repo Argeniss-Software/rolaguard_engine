@@ -34,6 +34,7 @@ class ResourceMeter():
                 if self.device_resource_usage(asset, packet):
                     if packet.uplink:
                         self.device_stats[asset.id]["last_fcount"] = packet.f_count
+                        self.device_stats[asset.id]["last_fcount_gtw"][packet.gateway] = packet.f_count
                     else:
                         self.device_stats[asset.id]["last_fcount_down"] = packet.f_count
                     self.device_stats[asset.id]["last_date"][packet.gateway] = packet.date
@@ -42,10 +43,11 @@ class ResourceMeter():
                 self.device_stats[asset.id] = {
                     "last_fcount" : packet.f_count if packet.uplink else None,
                     "last_fcount_down" : packet.f_count if not packet.uplink else None,
-                    "last_date" : {},   # dict containing the gateway hex ids in which the device is connected as key, and most recent date of packet as values 
-                    "rssi" : {},        # dict containing the gateway hex ids in which the device is connected as key, and rssi numbers as values 
-                    "lsnr" : {},        # dict containing the gateway hex ids in which the device is connected as key, and lsnr numbers as values
-                    "gateway_id": {}    # dict containing the gateway hex ids in which the device is connected as key, and db ids of the gateways as value 
+                    "last_date" : {},       # dict containing the gateway hex ids in which the device is connected as key, and most recent date of packet as values 
+                    "rssi" : {},            # dict containing the gateway hex ids in which the device is connected as key, and rssi numbers as values 
+                    "lsnr" : {},            # dict containing the gateway hex ids in which the device is connected as key, and lsnr numbers as values
+                    "gateway_id": {},       # dict containing the gateway hex ids in which the device is connected as key, and db ids of the gateways as value 
+                    "last_fcount_gtw": {},  # dict containing the gateway hex ids in which the device is connected as key, and most recent fcount of uplinks as values
                 }
                 if packet.rssi is not None:
                     self.device_stats[asset.id]["rssi"][packet.gateway] = packet.rssi
@@ -65,9 +67,20 @@ class ResourceMeter():
 
 
     def device_resource_usage(self, device, packet):
-        if packet.uplink and packet.f_count == self.device_stats[device.id]["last_fcount"]: 
-            return # Repeated uplink packet
-        if not packet.uplink and packet.f_count == self.device_stats[device.id]["last_fcount_down"]: 
+        if packet.uplink and packet.f_count == self.device_stats[device.id]["last_fcount"]:
+            if (
+                packet.gateway in self.device_stats[device.id]['last_fcount_gtw'] and \
+                packet.f_count == self.device_stats[device.id]['last_fcount_gtw'][packet.gateway]
+            ):
+                packet.is_retransmission = True
+            else:
+                # Same packet came from another gateway. Not adding it to last_fcount_gtw
+                # in order to count retransmissions of this packet only in one gateway
+                packet.is_repeated = True
+            return # Repeated or retransmitted uplink packet
+
+        if not packet.uplink and packet.f_count == self.device_stats[device.id]["last_fcount_down"]:
+            packet.is_repeated = True
             return # Repeated downlink packet
 
         device.npackets_up += 1 if packet.uplink else 0
@@ -117,6 +130,7 @@ class ResourceMeter():
                 device.activity_freq_variance = 0
 
             # Update the mean number of packets lost
+            packet.npackets_lost_found = count_diff-1
             if device.npackets_lost:
                 device.npackets_lost = self.maw * device.npackets_lost + (1-self.maw) * (count_diff-1)
             else:

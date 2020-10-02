@@ -124,6 +124,9 @@ def process_packet(packet, policy):
     # The data_collector and dev_eui is used as UID to count JRs.
     if packet.dev_eui:
         if packet.m_type == 'JoinRequest':
+            # If the previos packet was also a JR, then it is considered as failed
+            if jr_counters[(packet.data_collector_id, packet.dev_eui)] > 0:
+                packet.failed_jr_found = True
             jr_counters[(packet.data_collector_id, packet.dev_eui)] += 1
         else:
             jr_counters[(packet.data_collector_id, packet.dev_eui)] = 0
@@ -234,13 +237,14 @@ def process_packet(packet, policy):
     chrono.stop()
 
     chrono.start("update")
-    if gateway: gateway.update_state(packet)
-    if device_session: device_session.update_state(packet)
-    if device: device.update_state(packet)
 
     resource_meter(device, packet, policy)
     resource_meter(gateway, packet, policy)
     resource_meter.gc(packet.date)
+
+    if gateway: gateway.update_state(packet)
+    if device_session: device_session.update_state(packet)
+    if device: device.update_state(packet)
 
     ## Check alert LAF-100
     if (
