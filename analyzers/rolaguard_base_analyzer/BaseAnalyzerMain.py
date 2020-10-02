@@ -232,13 +232,14 @@ def process_packet(packet, policy):
     chrono.stop()
 
     chrono.start("update")
-    if gateway: gateway.update_state(packet)
-    if device_session: device_session.update_state(packet)
-    if device: device.update_state(packet)
 
     resource_meter(device, packet, policy)
     resource_meter(gateway, packet, policy)
     resource_meter.gc(packet.date)
+
+    if gateway: gateway.update_state(packet)
+    if device_session: device_session.update_state(packet)
+    if device: device.update_state(packet)
 
     ## Check alert LAF-100
     if (
