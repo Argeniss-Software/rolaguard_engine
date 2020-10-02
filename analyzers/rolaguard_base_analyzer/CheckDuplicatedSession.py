@@ -14,7 +14,7 @@ class CheckDuplicatedSession():
 
     def __call__(self, packet, device_session, device, gateway, policy):
         if self.last_gc is None: self.last_gc = packet.date
-        if (self.last_gc - packet.date).seconds > 3600: self.garbage_collection(today = packet.date)
+        if (packet.date - self.last_gc).seconds > 3600: self.garbage_collection(today = packet.date)
         if (
             packet.m_type not in ["UnconfirmedDataUp", "ConfirmedDataUp"] or
             device_session is None or
