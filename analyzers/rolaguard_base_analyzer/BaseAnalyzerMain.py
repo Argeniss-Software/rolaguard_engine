@@ -204,22 +204,6 @@ def process_packet(packet, policy):
                                             counter=device_session.up_link_counter,
                                             new_counter=packet.f_count,
                                             prev_packet_id=device_session.last_packet_id)
-                        else:
-                            if policy.is_enabled("LAF-006") and not device.is_otaa:
-                                emit_alert("LAF-006", packet,
-                                            device=device,
-                                            device_session=device_session,
-                                            gateway=gateway,
-                                            counter=device_session.up_link_counter,
-                                            new_counter=packet.f_count,
-                                            prev_packet_id=device_session.last_packet_id)
-
-                            if device:
-                                if not device.is_otaa:
-                                    device_session.may_be_abp = True
-                                else:
-                                    logging.warning("The device is marked as OTAA but reset counter without having joined."\
-                                                    "Packet id %d"%(packet.id))
 
                     device_session.reset_counter += 1
         last_uplink_mic[device_session.id]= packet.mic
