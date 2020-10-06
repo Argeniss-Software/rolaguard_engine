@@ -15,17 +15,23 @@ class ABPDetector():
             device is None or
             gateway is None or
             packet.f_count is None
-        ): return
+        ): return # Can't be done anything without these data.
 
-        if device.is_otaa: return # It's already detected as OTAA
+        if device.is_otaa: return # It's already detected as OTAA, nothing to do.
 
-        if (
+        # Used to identify a "connection" to check. Here for connection we are 
+        # talking about the flow of packets between a gateway and a device in
+        # in the context of a stablished device_session.
+        lpacket_uid = (device.id, gateway.id)
+
+        if ( # This indicates that the device is OTAA
             packet.m_type in ["JoinRequest", "JoinAccept"] or
             (
                 packet.dev_addr is not None and
-                self.last_packet["dev_addr"] != packet.dev_addr
+                lpacket_uid in self.last_packet and
+                self.last_packet[lpacket_uid]["dev_addr"] != packet.dev_addr
             )
-        ): # This indicates that the device is OTAA
+        ):
             res_comment = "The device has sent a join request"
             issue_solved = Quarantine.remove_from_quarantine(
                 "LAF-006",
@@ -48,12 +54,7 @@ class ABPDetector():
             return
 
         if packet.m_type in ["UnconfirmedDataUp", "ConfirmedDataUp"] and packet.dev_addr is not None:
-            # Used to identify a "connection" to check. Here for connection we are 
-            # talking about the flow of packets between a gateway and a device in
-            # in the context of a stablished device_session.
-            lpacket_uid = (device.id, gateway.id)
-
-            if (
+            if ( # This indicates that the device is ABP
                 lpacket_uid in self.last_packet and
                 policy.is_enabled("LAF-006") and
                 packet.f_count == 0 and
@@ -63,7 +64,7 @@ class ABPDetector():
                     emit_alert(
                         "LAF-006", packet, device=device,
                         device_session=device_session,
-                        gateway=gateway,
+                        gateway = gateway,
                         counter = self.last_packet[lpacket_uid]["f_count"],
                         new_counter = packet.f_count
                         )
