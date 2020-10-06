@@ -68,7 +68,7 @@ class CheckSessionRegeneration():
             packet.dev_addr is None
         ): return # The packet is not important for the rest of this check
 
-        if ( # The counter has restarted and...
+        if ( # The counter has restarted
             lpacket_uid in self.last_packet and
             packet.f_count == 0 and
             self.last_packet[lpacket_uid]["f_count"] > 65500 
@@ -84,8 +84,9 @@ class CheckSessionRegeneration():
                                 counter=device_session.up_link_counter,
                                 new_counter=packet.f_count,
                                 prev_packet_id=device_session.last_packet_id)
-            else: # It has regenerated this session
-                self.last_packet[lpacket_uid]["has_joined"] = False
+            # After the restart the join request was "used", for another restart
+            # we need another JR. Therefore, the flag is set to false.
+            self.last_packet[lpacket_uid]["has_joined"] = False
         
         self.last_packet[lpacket_uid]['f_count'] = packet.f_count
         self.last_packet[lpacket_uid]['dev_addr']= packet.dev_addr
