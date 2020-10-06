@@ -6,6 +6,7 @@ from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
+from analyzers.rolaguard_base_analyzer.ABPDetector import ABPDetector
 
 from utils import Chronometer
 
@@ -18,6 +19,7 @@ jr_counters = defaultdict(lambda: 0)
 resource_meter = ResourceMeter()
 device_identifier = DeviceIdentifier()
 check_duplicated_session = CheckDuplicatedSession()
+abp_detector = ABPDetector()
 
 chrono = Chronometer(report_every=1000)
 
@@ -205,27 +207,18 @@ def process_packet(packet, policy):
                                             counter=device_session.up_link_counter,
                                             new_counter=packet.f_count,
                                             prev_packet_id=device_session.last_packet_id)
-                        else:
-                            if policy.is_enabled("LAF-006") and not device.is_otaa:
-                                emit_alert("LAF-006", packet,
-                                            device=device,
-                                            device_session=device_session,
-                                            gateway=gateway,
-                                            counter=device_session.up_link_counter,
-                                            new_counter=packet.f_count,
-                                            prev_packet_id=device_session.last_packet_id)
-
-                            if device:
-                                if not device.is_otaa:
-                                    device_session.may_be_abp = True
-                                else:
-                                    logging.warning("The device is marked as OTAA but reset counter without having joined."\
-                                                    "Packet id %d"%(packet.id))
 
                     device_session.reset_counter += 1
         last_uplink_mic[device_session.id]= packet.mic
 
     check_duplicated_session(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy=policy
+        )
+    abp_detector(
         packet=packet,
         device_session=device_session,
         device=device,
