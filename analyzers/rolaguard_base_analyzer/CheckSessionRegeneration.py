@@ -30,7 +30,8 @@ class CheckSessionRegeneration():
             self.last_packet[lpacket_uid] = {
                 'f_count' : packet.f_count,
                 'dev_addr' : packet.dev_addr,
-                'has_joined' : packet.m_type in ["JoinRequest", "JoinAccept"]
+                'has_joined' : packet.m_type in ["JoinRequest", "JoinAccept"],
+                'date' : packet.date
             }
             return
 
@@ -88,9 +89,10 @@ class CheckSessionRegeneration():
         
         self.last_packet[lpacket_uid]['f_count'] = packet.f_count
         self.last_packet[lpacket_uid]['dev_addr']= packet.dev_addr
+        self.last_packet[lpacket_uid]['date']= packet.date
 
 
     def garbage_collection(self, today):
-        todel = [k for k, v in self.last_packet.items() if (today - v['date']).seconds > (24 * 3600)]
+        todel = [k for k, v in self.last_packet.items() if (today - v['date']).seconds > (72 * 3600)]
         for k in todel: del self.last_packet[k]
         self.last_gc = today
