@@ -77,7 +77,8 @@ class ABPDetector():
             # the counter and dev_addr.
             self.last_packet[lpacket_uid] = {
                 'f_count' : packet.f_count,
-                'dev_addr' : packet.dev_addr
+                'dev_addr' : packet.dev_addr,
+                'date' : packet.date
             }
 
 
