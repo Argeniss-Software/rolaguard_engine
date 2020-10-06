@@ -9,8 +9,12 @@ from db.Models import DataCollector, Quarantine, AlertType
 class ABPDetector():
     def __init__(self):
         self.last_packet = defaultdict(lambda: {})
+        self.last_gc = None
 
     def __call__(self, packet, device_session, device, gateway, policy):
+        if self.last_gc is None: self.last_gc = packet.date
+        if (packet.date - self.last_gc).seconds > 3600: self.garbage_collection(today = packet.date)
+
         if (
             device is None or
             gateway is None or
@@ -76,3 +80,8 @@ class ABPDetector():
                 'dev_addr' : packet.dev_addr
             }
 
+
+    def garbage_collection(self, today):
+        todel = [k for k, v in self.last_packet.items() if (today - v['date']).seconds > (24 * 3600)]
+        for k in todel: del self.last_packet[k]
+        self.last_gc = today
