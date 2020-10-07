@@ -7,6 +7,7 @@ from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
 from analyzers.rolaguard_base_analyzer.CheckSessionRegeneration import CheckSessionRegeneration
+from analyzers.rolaguard_base_analyzer.ABPDetector import ABPDetector
 
 from utils import Chronometer
 
@@ -20,6 +21,7 @@ resource_meter = ResourceMeter()
 device_identifier = DeviceIdentifier()
 check_duplicated_session = CheckDuplicatedSession()
 check_session_regeneration = CheckSessionRegeneration()
+abp_detector = ABPDetector()
 
 chrono = Chronometer(report_every=1000)
 
@@ -207,6 +209,13 @@ def process_packet(packet, policy):
         policy=policy
         )
     check_session_regeneration(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy=policy
+        )
+    abp_detector(
         packet=packet,
         device_session=device_session,
         device=device,

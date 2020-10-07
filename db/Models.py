@@ -113,7 +113,6 @@ class Gateway(Base):
             vendor = DeviceVendorPrefix.get_vendor_from_dev_eui(packet.gateway)
         return Gateway(
             gw_hex_id = packet.gateway,
-            name = packet.gw_name,
             vendor = vendor,
             data_collector_id = packet.data_collector_id,
             organization_id = packet.organization_id,
@@ -150,6 +149,8 @@ class Gateway(Base):
                 self.location_latitude = packet.latitude
                 self.location_longitude = packet.longitude
             self.last_packet_id = packet.id
+            if packet.gw_name: 
+                self.name = packet.gw_name,
             GatewayCounters.upsert_counters(gateway = self, packet = packet)
         except Exception as exc:
             log.error(f"Error updating gateway {self.id}: {exc}")
@@ -325,7 +326,7 @@ class Device(Base):
         except Exception as exc:
             log.error(f"Error creating device: {exc}")
 
-    def db_update(cls):
+    def db_update(self):
         session.commit()
         
     def update_state(self, packet):
@@ -337,7 +338,6 @@ class Device(Base):
                 self.join_accept_counter += 1
             if packet.m_type == "JoinRequest":
                 self.join_request_counter += 1
-                self.is_otaa = True
             self.last_packet_id = packet.id
             if packet.m_type in ["UnconfirmedDataUp", "ConfirmedDataUp", "JoinRequest"]:
                 packets_list = json.loads(self.last_packets_list)
