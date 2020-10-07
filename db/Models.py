@@ -326,7 +326,7 @@ class Device(Base):
         except Exception as exc:
             log.error(f"Error creating device: {exc}")
 
-    def db_update(cls):
+    def db_update(self):
         session.commit()
         
     def update_state(self, packet):
