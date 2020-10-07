@@ -40,6 +40,7 @@ class ABPDetector():
             issue_solved = Quarantine.remove_from_quarantine(
                 "LAF-006",
                 device_id = device.id,
+                device_session_id = None,
                 data_collector_id = packet.data_collector_id,
                 res_reason_id = 3,
                 res_comment = res_comment
