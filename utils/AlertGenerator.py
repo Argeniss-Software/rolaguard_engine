@@ -10,6 +10,7 @@ alert_blocked_by = {
     "LAF-007" : ["LAF-007"],            # Possible duplicated sessions 
     "LAF-009" : ["LAF-009"],            # Easy to guess key
     "LAF-010" : ["LAF-010"],            # Gateway changed location
+    "LAF-011" : ["LAF-011"],            # Device not regenerating session
     "LAF-100" : ["LAF-100"],            # Device signal intensity below threshold
     "LAF-102" : ["LAF-102"],            # Device signal to noise ratio below threshold
     "LAF-101" : ["LAF-101"],            # Device losing many packets
