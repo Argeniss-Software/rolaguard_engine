@@ -1,7 +1,8 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
 from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType
+    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType, \
+    DeviceCounters, CounterType
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
@@ -15,6 +16,10 @@ from utils import Chronometer
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
 last_uplink_mic = {}
+# Dict structure that stores device ids as keys and estimated retransmissions as values.
+# Works like a cached version of retransmission counters stored in database (device_counters table)
+# In the future, maybe we will need to store the other counters in this same structure as well.
+devices_retransmissions = {}
 jr_counters = defaultdict(lambda: 0)
 
 resource_meter = ResourceMeter()
@@ -258,7 +263,8 @@ def process_packet(packet, policy):
         device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
     ):
         emit_alert(
-            "LAF-101", packet,
+            alert_type="LAF-101",
+            packet=packet,
             device=device,
             device_session=device_session,
             gateway=gateway,
@@ -273,13 +279,54 @@ def process_packet(packet, policy):
         device.max_lsnr < policy.get_parameters("LAF-102")["minimum_lsnr"]
     ):
         emit_alert(
-            "LAF-102", 
+            alert_type="LAF-102", 
             packet=packet,
             device=device,
             device_session=device_session,
             gateway=gateway,
             lsnr=device.max_lsnr
         )
+
+    if packet.is_retransmission:
+        # Initialize dict entry if it not exists, increment it otherwise
+        if devices_retransmissions.get(device.id) is None:
+            devices_retransmissions[device.id] = DeviceCounters.get_device_counter(
+                device_id=device.id,
+                packet_date=packet.date,
+                counter_type=CounterType.RETRANSMISSIONS,
+                window=policy.get_parameters("LAF-103")["time_window"]
+            )
+        else:
+            devices_retransmissions[device.id] += 1
+
+        cached_retransmissions = devices_retransmissions[device.id]
+        max_retransmissions = policy.get_parameters("LAF-103")["max_retransmissions"]
+        if cached_retransmissions > max_retransmissions:
+            # Cached retransmission counter was greater than allowed, look in database
+            stored_retransmissions = DeviceCounters.get_device_counter(
+                device_id=device.id,
+                packet_date=packet.date,
+                counter_type=CounterType.RETRANSMISSIONS,
+                window=policy.get_parameters("LAF-103")["time_window"]
+            )
+
+            # Check alert LAF-103
+            if(
+                stored_retransmissions > max_retransmissions and \
+                policy.is_enabled("LAF-103")
+            ):
+                emit_alert(
+                    alert_type="LAF-103",
+                    packet=packet,
+                    device=device,
+                    device_session=device_session,
+                    gateway=gateway,
+                    retransmissions=stored_retransmissions
+                )
+            else:
+                # Cached retransmissions counter was outdated, store the new value in in-memory
+                cached_retransmissions = stored_retransmissions
+                devices_retransmissions[device.id] = cached_retransmissions
 
     chrono.stop("total")
     chrono.lap()

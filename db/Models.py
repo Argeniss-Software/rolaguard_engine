@@ -2,12 +2,12 @@ import math
 import json
 import logging as log
 from sqlalchemy import Column, DateTime, String, Integer, BigInteger, SmallInteger, Float, Boolean, Interval,\
-                       ForeignKey, func, asc, desc, func, LargeBinary, or_, Enum as SQLEnum
+                       ForeignKey, func, asc, desc, func, LargeBinary, or_, Enum as SQLEnum, cast
 from db import session, Base, engine
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import relationship
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timedelta
 
 BigIntegerType = BigInteger()
 BigIntegerType = BigIntegerType.with_variant(postgresql.BIGINT(), 'postgresql')
@@ -430,6 +430,22 @@ class DeviceCounters(Base):
             session.commit()
         
         return
+    
+    @classmethod
+    def get_device_counter(cls, device_id, packet_date, counter_type, window):
+        # get range of past hours to look at, as integers
+        hours_to_look = [(packet_date - timedelta(hours=x)).hour for x in range(window)]
+        # discard hours, minutes, seconds and ms from packet date to use it as old counters filter
+        truncate_packet_date = packet_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        result = session.query(cast(func.sum(cls.value), Integer)).filter(
+            cls.device_id == device_id,
+            cls.counter_type == counter_type,
+            cls.last_update >= truncate_packet_date, # filtering out old counters
+            cls.hour_of_day.in_(hours_to_look) # filtering counters that are outside time window
+        ).first()
+        
+        return result[0] if result[0] else 0
 
 
 class GatewayCounters(Base):
