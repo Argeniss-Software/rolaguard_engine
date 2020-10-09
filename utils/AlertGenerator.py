@@ -18,6 +18,7 @@ alert_blocked_by = {
     "LAF-501" : ["LAF-501", "LAF-404"], # Anomaly in Join Requests frequency -> Device failed to join 
 }
 
+session_alerts = ["LAF-002", "LAF-007"]
 gateway_alerts = ["LAF-010", "LAF-402", "LAF-403"] # Gateway changed location, New gateway found, Gateway connection lost
 
 def emit_alert(alert_type, packet, device=None, device_session=None, gateway=None, device_auth_id=None, **custom_parameters):
@@ -67,7 +68,7 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
                 issue = Quarantine.find_open_by_type_dev_coll(
                     alert_type=blocking_issue,
                     device_id=device.id if device else None,
-                    device_session_id=device_session.id if device_session else None,
+                    device_session_id=device_session.id if device_session and alert_type in session_alerts else None,
                     data_collector_id=packet.data_collector_id
                 )
                 if issue:
