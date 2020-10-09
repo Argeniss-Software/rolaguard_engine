@@ -32,7 +32,7 @@ class CheckPacketsLost():
 
                 self.devices_packets_lost[device.id]["packets_lost"] = stored_packets_lost
             else:
-                self.devices_packets_lost[device.id]["packets_lost"] += 1
+                self.devices_packets_lost[device.id]["packets_lost"] += packet.npackets_lost_found
         
             cached_packets_lost = self.devices_packets_lost[device.id]["packets_lost"]
             max_packets_lost = policy_manager.get_parameters("LAF-101")["max_packets_lost"]
