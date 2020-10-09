@@ -2,7 +2,7 @@ import math
 import json
 import logging as log
 from sqlalchemy import Column, DateTime, String, Integer, BigInteger, SmallInteger, Float, Boolean, Interval,\
-                       ForeignKey, func, asc, desc, func, LargeBinary, or_, Enum as SQLEnum, cast
+                       ForeignKey, func, asc, desc, func, LargeBinary, or_, not_, Enum as SQLEnum, cast
 from db import session, Base, engine
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import relationship
@@ -216,7 +216,7 @@ class DataCollector(Base):
     @classmethod
     def number_of_devices(cls, data_collector_id):
         ndev = session.query(Device.dev_eui).\
-                filter(Device.connected).\
+                filter(not_(Device.pending_first_connection)).\
                 filter(Device.data_collector_id == data_collector_id).\
                 distinct().count()
         return ndev
