@@ -296,46 +296,5 @@ def process_packet(packet, policy):
             lsnr=device.max_lsnr
         )
 
-    if packet.is_retransmission:
-        # Initialize dict entry if it not exists, increment it otherwise
-        if devices_retransmissions.get(device.id) is None:
-            devices_retransmissions[device.id] = DeviceCounters.get_device_counter(
-                device_id=device.id,
-                packet_date=packet.date,
-                counter_type=CounterType.RETRANSMISSIONS,
-                window=policy.get_parameters("LAF-103")["time_window"]
-            )
-        else:
-            devices_retransmissions[device.id] += 1
-
-        cached_retransmissions = devices_retransmissions[device.id]
-        max_retransmissions = policy.get_parameters("LAF-103")["max_retransmissions"]
-        if cached_retransmissions > max_retransmissions:
-            # Cached retransmission counter was greater than allowed, look in database
-            stored_retransmissions = DeviceCounters.get_device_counter(
-                device_id=device.id,
-                packet_date=packet.date,
-                counter_type=CounterType.RETRANSMISSIONS,
-                window=policy.get_parameters("LAF-103")["time_window"]
-            )
-
-            # Check alert LAF-103
-            if(
-                stored_retransmissions > max_retransmissions and \
-                policy.is_enabled("LAF-103")
-            ):
-                emit_alert(
-                    alert_type="LAF-103",
-                    packet=packet,
-                    device=device,
-                    device_session=device_session,
-                    gateway=gateway,
-                    retransmissions=stored_retransmissions
-                )
-            else:
-                # Cached retransmissions counter was outdated, store the new value in in-memory
-                cached_retransmissions = stored_retransmissions
-                devices_retransmissions[device.id] = cached_retransmissions
-
     chrono.stop("total")
     chrono.lap()
