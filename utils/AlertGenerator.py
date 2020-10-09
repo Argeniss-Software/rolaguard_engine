@@ -12,6 +12,7 @@ alert_blocked_by = {
     "LAF-010" : ["LAF-010"],            # Gateway changed location
     "LAF-011" : ["LAF-011"],            # Device not regenerating session
     "LAF-100" : ["LAF-100"],            # Device signal intensity below threshold
+    "LAF-103" : ["LAF-103"],            # Too many retransmissions by device
     "LAF-102" : ["LAF-102"],            # Device signal to noise ratio below threshold
     "LAF-101" : ["LAF-101"],            # Device losing many packets
     "LAF-404" : ["LAF-404"],            # Device failed to join

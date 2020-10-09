@@ -308,5 +308,5 @@ if __name__ == '__main__':
         processData()
     
     except KeyboardInterrupt:
-        print('asfasfasfasf')
+        print('exiting engine')
         exit(0)

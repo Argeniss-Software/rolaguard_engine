@@ -1,13 +1,15 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
 from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType
+    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType, \
+    DeviceCounters, CounterType
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
 from analyzers.rolaguard_base_analyzer.CheckSessionRegeneration import CheckSessionRegeneration
 from analyzers.rolaguard_base_analyzer.ABPDetector import ABPDetector
+from analyzers.rolaguard_base_analyzer.CheckRetransmissions import CheckRetransmissions
 
 from utils import Chronometer
 
@@ -22,6 +24,7 @@ device_identifier = DeviceIdentifier()
 check_duplicated_session = CheckDuplicatedSession()
 check_session_regeneration = CheckSessionRegeneration()
 abp_detector = ABPDetector()
+check_retransmissions = CheckRetransmissions()
 
 chrono = Chronometer(report_every=1000)
 
@@ -222,6 +225,13 @@ def process_packet(packet, policy):
         gateway=gateway,
         policy=policy
         )
+    check_retransmissions(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy_manager=policy
+    )
 
 
     chrono.stop()
@@ -258,7 +268,8 @@ def process_packet(packet, policy):
         device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
     ):
         emit_alert(
-            "LAF-101", packet,
+            alert_type="LAF-101",
+            packet=packet,
             device=device,
             device_session=device_session,
             gateway=gateway,
@@ -273,7 +284,7 @@ def process_packet(packet, policy):
         device.max_lsnr < policy.get_parameters("LAF-102")["minimum_lsnr"]
     ):
         emit_alert(
-            "LAF-102", 
+            alert_type="LAF-102", 
             packet=packet,
             device=device,
             device_session=device_session,
