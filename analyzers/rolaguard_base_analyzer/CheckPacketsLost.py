@@ -64,8 +64,7 @@ class CheckPacketsLost():
                 self.devices_packets_lost[device.id]["packets_lost"] = cached_packets_lost
 
             self.devices_packets_lost[device.id]["last_updated"] = packet.date
-        else:
-            log.info("PACKET WAS NOT LOST")
+
     def garbage_collection(self, today):
         todel = [k for k, v in self.devices_packets_lost.items() if (today - v['last_updated']).seconds > (24 * 3600)]
         for k in todel: del self.devices_packets_lost[k]
