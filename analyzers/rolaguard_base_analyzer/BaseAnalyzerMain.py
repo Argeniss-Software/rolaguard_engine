@@ -17,10 +17,6 @@ from utils import Chronometer
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
 last_uplink_mic = {}
-# Dict structure that stores device ids as keys and estimated retransmissions as values.
-# Works like a cached version of retransmission counters stored in database (device_counters table)
-# In the future, maybe we will need to store the other counters in this same structure as well.
-devices_retransmissions = {}
 jr_counters = defaultdict(lambda: 0)
 
 resource_meter = ResourceMeter()
