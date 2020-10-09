@@ -9,6 +9,7 @@ from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
 from analyzers.rolaguard_base_analyzer.CheckSessionRegeneration import CheckSessionRegeneration
 from analyzers.rolaguard_base_analyzer.ABPDetector import ABPDetector
+from analyzers.rolaguard_base_analyzer.CheckRetransmissions import CheckRetransmissions
 
 from utils import Chronometer
 
@@ -27,6 +28,7 @@ device_identifier = DeviceIdentifier()
 check_duplicated_session = CheckDuplicatedSession()
 check_session_regeneration = CheckSessionRegeneration()
 abp_detector = ABPDetector()
+check_retransmissions = CheckRetransmissions()
 
 chrono = Chronometer(report_every=1000)
 
@@ -227,6 +229,13 @@ def process_packet(packet, policy):
         gateway=gateway,
         policy=policy
         )
+    check_retransmissions(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy_manager=policy
+    )
 
 
     chrono.stop()
