@@ -10,6 +10,7 @@ from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplic
 from analyzers.rolaguard_base_analyzer.CheckSessionRegeneration import CheckSessionRegeneration
 from analyzers.rolaguard_base_analyzer.ABPDetector import ABPDetector
 from analyzers.rolaguard_base_analyzer.CheckRetransmissions import CheckRetransmissions
+from analyzers.rolaguard_base_analyzer.CheckPacketsLost import CheckPacketsLost
 
 from utils import Chronometer
 
@@ -25,6 +26,7 @@ check_duplicated_session = CheckDuplicatedSession()
 check_session_regeneration = CheckSessionRegeneration()
 abp_detector = ABPDetector()
 check_retransmissions = CheckRetransmissions()
+check_packets_lost = CheckPacketsLost()
 
 chrono = Chronometer(report_every=1000)
 
@@ -204,6 +206,7 @@ def process_packet(packet, policy):
                     device_session.reset_counter += 1
         last_uplink_mic[device_session.id]= packet.mic
 
+    # Check alert LAF-007
     check_duplicated_session(
         packet=packet,
         device_session=device_session,
@@ -211,6 +214,7 @@ def process_packet(packet, policy):
         gateway=gateway,
         policy=policy
         )
+    # CHeck alert LAF-011
     check_session_regeneration(
         packet=packet,
         device_session=device_session,
@@ -218,6 +222,7 @@ def process_packet(packet, policy):
         gateway=gateway,
         policy=policy
         )
+    # Check alert LAF-006
     abp_detector(
         packet=packet,
         device_session=device_session,
@@ -225,6 +230,7 @@ def process_packet(packet, policy):
         gateway=gateway,
         policy=policy
         )
+    # Check alert LAF-103
     check_retransmissions(
         packet=packet,
         device_session=device_session,
@@ -232,7 +238,14 @@ def process_packet(packet, policy):
         gateway=gateway,
         policy_manager=policy
     )
-
+    # Check alert LAF-101
+    check_packets_lost(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy_manager=policy
+    )
 
     chrono.stop()
 
@@ -258,22 +271,6 @@ def process_packet(packet, policy):
             device_session = device_session,
             gateway = gateway,
             rssi = device.max_rssi
-            )
-
-    ## Check alert LAF-101
-    if (
-        device and \
-        device.activity_freq is not None and device.npackets_lost is not None and \
-        policy.is_enabled("LAF-101") and \
-        device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
-    ):
-        emit_alert(
-            alert_type="LAF-101",
-            packet=packet,
-            device=device,
-            device_session=device_session,
-            gateway=gateway,
-            packets_lost=device.npackets_lost
             )
 
     ## Check alert LAF-102
