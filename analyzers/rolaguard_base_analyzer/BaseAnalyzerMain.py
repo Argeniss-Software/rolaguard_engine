@@ -1,11 +1,16 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
 from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType
+    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType, \
+    DeviceCounters, CounterType
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
+from analyzers.rolaguard_base_analyzer.CheckSessionRegeneration import CheckSessionRegeneration
+from analyzers.rolaguard_base_analyzer.ABPDetector import ABPDetector
+from analyzers.rolaguard_base_analyzer.CheckRetransmissions import CheckRetransmissions
+from analyzers.rolaguard_base_analyzer.CheckPacketsLost import CheckPacketsLost
 
 from utils import Chronometer
 
@@ -18,6 +23,10 @@ jr_counters = defaultdict(lambda: 0)
 resource_meter = ResourceMeter()
 device_identifier = DeviceIdentifier()
 check_duplicated_session = CheckDuplicatedSession()
+check_session_regeneration = CheckSessionRegeneration()
+abp_detector = ABPDetector()
+check_retransmissions = CheckRetransmissions()
+check_packets_lost = CheckPacketsLost()
 
 chrono = Chronometer(report_every=1000)
 
@@ -124,6 +133,9 @@ def process_packet(packet, policy):
     # The data_collector and dev_eui is used as UID to count JRs.
     if packet.dev_eui:
         if packet.m_type == 'JoinRequest':
+            # If the previos packet was also a JR, then it is considered as failed
+            if jr_counters[(packet.data_collector_id, packet.dev_eui)] > 0:
+                packet.failed_jr_found = True
             jr_counters[(packet.data_collector_id, packet.dev_eui)] += 1
         else:
             jr_counters[(packet.data_collector_id, packet.dev_eui)] = 0
@@ -191,37 +203,10 @@ def process_packet(packet, policy):
                     elif device and device.join_inferred:
                         # The counter = 0  is valid, then change the join_inferred flag
                         device.join_inferred = False
-                    
-                    else:
-                        if device_session.up_link_counter > 65500:
-                            if policy.is_enabled("LAF-011"):
-                                emit_alert("LAF-011", packet,
-                                            device=device,
-                                            device_session=device_session,
-                                            gateway=gateway,
-                                            counter=device_session.up_link_counter,
-                                            new_counter=packet.f_count,
-                                            prev_packet_id=device_session.last_packet_id)
-                        else:
-                            if policy.is_enabled("LAF-006") and not device.is_otaa:
-                                emit_alert("LAF-006", packet,
-                                            device=device,
-                                            device_session=device_session,
-                                            gateway=gateway,
-                                            counter=device_session.up_link_counter,
-                                            new_counter=packet.f_count,
-                                            prev_packet_id=device_session.last_packet_id)
-
-                            if device:
-                                if not device.is_otaa:
-                                    device_session.may_be_abp = True
-                                else:
-                                    logging.warning("The device is marked as OTAA but reset counter without having joined."\
-                                                    "Packet id %d"%(packet.id))
-
                     device_session.reset_counter += 1
         last_uplink_mic[device_session.id]= packet.mic
 
+    # Check alert LAF-007
     check_duplicated_session(
         packet=packet,
         device_session=device_session,
@@ -229,18 +214,50 @@ def process_packet(packet, policy):
         gateway=gateway,
         policy=policy
         )
-
+    # CHeck alert LAF-011
+    check_session_regeneration(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy=policy
+        )
+    # Check alert LAF-006
+    abp_detector(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy=policy
+        )
+    # Check alert LAF-103
+    check_retransmissions(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy_manager=policy
+    )
+    # Check alert LAF-101
+    check_packets_lost(
+        packet=packet,
+        device_session=device_session,
+        device=device,
+        gateway=gateway,
+        policy_manager=policy
+    )
 
     chrono.stop()
 
     chrono.start("update")
-    if gateway: gateway.update_state(packet)
-    if device_session: device_session.update_state(packet)
-    if device: device.update_state(packet)
 
     resource_meter(device, packet, policy)
     resource_meter(gateway, packet, policy)
     resource_meter.gc(packet.date)
+
+    if gateway: gateway.update_state(packet)
+    if device_session: device_session.update_state(packet)
+    if device: device.update_state(packet)
 
     ## Check alert LAF-100
     if (
@@ -256,21 +273,6 @@ def process_packet(packet, policy):
             rssi = device.max_rssi
             )
 
-    ## Check alert LAF-101
-    if (
-        device and \
-        device.activity_freq is not None and device.npackets_lost is not None and \
-        policy.is_enabled("LAF-101") and \
-        device.npackets_lost > policy.get_parameters("LAF-101")["max_lost_packets"]
-    ):
-        emit_alert(
-            "LAF-101", packet,
-            device=device,
-            device_session=device_session,
-            gateway=gateway,
-            packets_lost=device.npackets_lost
-            )
-
     ## Check alert LAF-102
     if(
         device and \
@@ -279,7 +281,7 @@ def process_packet(packet, policy):
         device.max_lsnr < policy.get_parameters("LAF-102")["minimum_lsnr"]
     ):
         emit_alert(
-            "LAF-102", 
+            alert_type="LAF-102", 
             packet=packet,
             device=device,
             device_session=device_session,

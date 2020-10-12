@@ -10,13 +10,16 @@ alert_blocked_by = {
     "LAF-007" : ["LAF-007"],            # Possible duplicated sessions 
     "LAF-009" : ["LAF-009"],            # Easy to guess key
     "LAF-010" : ["LAF-010"],            # Gateway changed location
+    "LAF-011" : ["LAF-011"],            # Device not regenerating session
     "LAF-100" : ["LAF-100"],            # Device signal intensity below threshold
+    "LAF-103" : ["LAF-103"],            # Too many retransmissions by device
     "LAF-102" : ["LAF-102"],            # Device signal to noise ratio below threshold
     "LAF-101" : ["LAF-101"],            # Device losing many packets
     "LAF-404" : ["LAF-404"],            # Device failed to join
     "LAF-501" : ["LAF-501", "LAF-404"], # Anomaly in Join Requests frequency -> Device failed to join 
 }
 
+session_alerts = ["LAF-002", "LAF-007"]
 gateway_alerts = ["LAF-010", "LAF-402", "LAF-403"] # Gateway changed location, New gateway found, Gateway connection lost
 
 def emit_alert(alert_type, packet, device=None, device_session=None, gateway=None, device_auth_id=None, **custom_parameters):
@@ -66,7 +69,7 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
                 issue = Quarantine.find_open_by_type_dev_coll(
                     alert_type=blocking_issue,
                     device_id=device.id if device else None,
-                    device_session_id=device_session.id if device_session else None,
+                    device_session_id=device_session.id if device_session and alert_type in session_alerts else None,
                     data_collector_id=packet.data_collector_id
                 )
                 if issue:
