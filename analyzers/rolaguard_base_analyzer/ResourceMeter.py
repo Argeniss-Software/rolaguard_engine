@@ -66,6 +66,13 @@ class ResourceMeter():
             }
 
 
+    def get_len_bytes_base_64(base64string):
+        """ Calculate the length in bytes base64string string taking in account the padding '=' character """
+        packet_data_length_in_characters = len(base64string)
+        packet_data_number_of_padding_characters = base64string.count("=")
+        return int((3 * (packet_data_length_in_characters / 4)) - (packet_data_number_of_padding_characters))
+
+
     def device_resource_usage(self, device, packet):
         if packet.uplink and packet.f_count == self.device_stats[device.id]["last_fcount"]:
             if (
@@ -162,9 +169,8 @@ class ResourceMeter():
                 device.max_lsnr = max(self.device_stats[device.id]["lsnr"].values())
             except: pass
 
-            # Update size of payload
-            device.payload_size = len(packet.data)
-            
+            # Update size of payload. The payload size is in bytes.                        
+            device.payload_size = self.get_len_bytes_base_64(packet.data)                        
         return True
 
 
