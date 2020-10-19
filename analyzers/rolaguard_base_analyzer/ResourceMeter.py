@@ -66,7 +66,7 @@ class ResourceMeter():
             }
 
 
-    def get_len_bytes_base_64(base64string):
+    def get_len_bytes_base_64(self, base64string):
         """ Calculate the length in bytes base64string string taking in account the padding '=' character """
         packet_data_length_in_characters = len(base64string)
         packet_data_number_of_padding_characters = base64string.count("=")
