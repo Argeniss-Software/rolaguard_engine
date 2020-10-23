@@ -1,7 +1,7 @@
 import json, datetime, logging, os
 from analyzers.rolaguard_bruteforce_analyzer.lorawanwrapper import LorawanWrapper 
 from utils import emit_alert
-from db.Models import Device, DeviceAuthData, PotentialAppKey, Quarantine, AlertType, AppKey
+from db.Models import Device, DeviceAuthData, PotentialAppKey, Issue, AlertType, AppKey
 
 
 device_auth_obj = None
@@ -192,15 +192,13 @@ def process_packet(packet, policy):
             else:
                 logging.error("Cracked a JoinAccept but no device_auth object found")
 
-    if key_tested and len(result)==0 and is_on_quarantine("LAF-009", packet, device=device_obj):
+    if key_tested and len(result)==0:
         res_comment = "The AppKey was modified"
-        issue_solved = Quarantine.remove_from_quarantine(
-            "LAF-009",
-            device_id = device_obj.id,
-            device_session_id = None,
-            data_collector_id = packet.data_collector_id,
-            res_reason_id = 3,
-            res_comment = res_comment
+        issue_solved = Issue.solve(
+            resolution_reason=res_comment,
+            date=packet.date,
+            issue_type="LAF-009",
+            device_id=device_obj.id,
             )
         if issue_solved:
             emit_alert(
@@ -212,18 +210,6 @@ def process_packet(packet, policy):
                 resolution_reason = res_comment
             )
 
-
-def is_on_quarantine(alert_type, packet, device=None, device_session=None):
-    """
-    Inform if an alert/device or alert/device_session is on quarantine
-    """
-    if device is None and device_session is None:
-        raise Exception("Must provide device or device_session")
-    quarantine_row = Quarantine.find_open_by_type_dev_coll(alert_type,
-                                                           device.id if device else None,
-                                                           device_session.id if device_session else None,
-                                                           packet.data_collector_id)
-    return quarantine_row is not None 
 
 
 def deriveSessionKeys(device_auth_obj, appKey):

@@ -1,7 +1,7 @@
 import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
 from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Quarantine, DeviceVendorPrefix, AlertType, \
+    Packet, DataCollector, Issue, DeviceVendorPrefix, AlertType, \
     DeviceCounters, CounterType
 from utils import emit_alert
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
@@ -67,13 +67,11 @@ def process_packet(packet, policy):
         device_session.save()
         
         if device:
-            issue_solved = Quarantine.remove_from_quarantine(
-                "LAF-404",
-                device_id = device.id,
-                device_session_id = None,
-                data_collector_id = packet.data_collector_id,
-                res_reason_id = 3,
-                res_comment = "Device connected"
+            issue_solved = Issue.solve(
+                resolution_reason="Device connected",
+                date=packet.date,
+                issue_type="LAF-404",
+                device_id=device.id,
                 )
             if issue_solved:
                 emit_alert(
