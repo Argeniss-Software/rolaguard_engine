@@ -1,4 +1,4 @@
-from db.Models import Device, Gateway, Quarantine, AlertType, GatewayToDevice
+from db.Models import Device, Gateway, Issue, AlertType, GatewayToDevice
 from datetime import date
 from utils import emit_alert
 import logging
@@ -98,13 +98,14 @@ class ResourceMeter():
             # If device is reconnecting, then resolve every "not transmitting"
             # issue for this device, with reason_id 0 (problem solved automatically)
             if not device.connected:
-                issues = Quarantine.find_open_by_type_dev_coll(alert_type='LAF-401', device_id=device.id, returnAll=True)
-                for issue in issues:
-                    issue.resolve(
-                        reason_id=0,
-                        comment="The device has transmitted again",
-                        commit=False
+                res_comment = "The device has transmitted again"
+                issue_solved = Issue.solve(
+                    resolution_reason=res_comment,
+                    date=packet.date,
+                    issue_type="LAF-401",
+                    device_id=device.id,
                     )
+                if issue_solved:
                     emit_alert(
                         "LAF-600",
                         packet,
@@ -188,20 +189,21 @@ class ResourceMeter():
         # If gateway is reconnecting, then resolve every "not transmitting"
         # issue for this gateway, with reason_id 0 (problem solved automatically)
         if not gateway.connected:
-            issues = Quarantine.find_open_by_type_dev_coll(alert_type='LAF-403', gateway_id=gateway.id, returnAll=True)
-            for issue in issues:
-                issue.resolve(
-                    reason_id=0,
-                    comment="The gateway has transmitted again",
-                    commit=False
+            res_comment = "The gateway has transmitted again"
+            issue_solved = Issue.solve(
+                resolution_reason=res_comment,
+                date=packet.date,
+                issue_type="LAF-403",
+                gateway_id=gateway.id,
                 )
+            if issue_solved:
                 emit_alert(
                     "LAF-600",
                     packet,
                     gateway = gateway,
                     alert_solved_type = "LAF-403",
                     alert_solved = AlertType.find_one_by_code("LAF-403").name,
-                    resolution_reason = "The gateway has transmitted again"
+                    resolution_reason = res_comment
                 )
 
         gateway.connected = True
