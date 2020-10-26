@@ -1029,30 +1029,18 @@ class QuarantineResolutionReasonType(Enum):
 
 class QuarantineResolutionReason(Base):
     __tablename__ = "quarantine_resolution_reason"
-    #region fields
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     type = Column(SQLEnum(QuarantineResolutionReasonType))
     name = Column(String(80), nullable=False)
     description = Column(String(200), nullable=True)
-    #endregion
 
-    @classmethod
-    def find_by_id(cls, id):
-        return session.query(cls).filter(cls.id == id).first()
 
-    @classmethod
-    def find_by_type(cls, type):
-        return session.query(cls).filter(cls.type == type).first()
-
-class Quarantine(Base):
+class Issue(Base):
     __tablename__ = "quarantine"
-    #region fields
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     device_id = Column(BigInteger, ForeignKey("device.id"), nullable=True)
     device_session_id = Column(BigInteger, ForeignKey("device_session.id"), nullable=True)
-    # organization relationship
     organization_id = Column(BigInteger, ForeignKey("organization.id"), nullable=False)
-    # alert relationship
     alert_id = Column(BigInteger, ForeignKey("alert.id"), nullable=False)
     # since when is this device/alert in quarantine
     since = Column(DateTime(timezone=True), nullable=False)
@@ -1060,117 +1048,75 @@ class Quarantine(Base):
     last_checked = Column(DateTime(timezone=True), nullable=True)
     # when was resolved, if applicable
     resolved_at = Column(DateTime(timezone=True), nullable=True)
-    # who resolved the quarantine, if applicable.
-    # This is a foreign key to User, but here in Engine it is not used so
-    # I removed the FK declaration to avoid bringing in the User class
-    resolved_by_id = Column(BigInteger, nullable=True)
     # resolution reason relationship, if resolved. Null if not
     resolution_reason_id = Column(BigInteger, ForeignKey("quarantine_resolution_reason.id"), nullable=True)
-    # resolution comment (optional)
-    resolution_comment = Column(String(1024), nullable=True)
-    # quarantine parameters (optional)
-    parameters = Column(String(4096), nullable=True)
+
     alert = relationship("Alert", lazy="joined")
-    #endregion
 
-    def save(self):
-        session.add(self)
-        session.commit()
+    gateway_issues = ["LAF-010", "LAF-402", "LAF-403"] # Gateway changed location, New gateway found, Gateway connection lost
 
-    def resolve(self, reason_id, comment, resolved_by_id=None, commit=True):
-        self.resolved_at = datetime.now()
-        self.resolved_by_id = resolved_by_id
-        self.resolution_reason_id = reason_id
-        self.resolution_comment = comment
-        if commit:
-            session.commit()
+
 
     @classmethod
-    def find_by_id(cls, id):
-        return session.query(cls).filter(cls.id == id).first()
+    def get_with(cls, issue_type, device_id=None, gateway_id=None, return_all=False):
+        if device_id is None and issue_type not in cls.gateway_issues:
+            raise Exception(f"Must provide a device_id for the issue {issue_type}")
+        if gateway_id is None and issue_type in cls.gateway_issues:
+            raise Exception(f"Must provide a gateway_id for the issue {issue_type}")
 
-    @classmethod
-    def get_dev_id(cls, dev_eui, data_collector_id):
-        dev_ids = Device.find(dev_eui, data_collector_id)
-        if len(dev_ids) == 1:
-            return dev_ids[0].id
-        elif len(dev_ids) == 0:
-            raise RuntimeError(f"No device with dev_eui {dev_eui} and data_collector_id {data_collector_id} found in database")
-        else:
-            raise RuntimeError(f"More than one device with eui {dev_eui} and data_collector_id {data_collector_id}")
-
-    @classmethod
-    def find_open_by_alert(cls, alert):
-        return cls.find_open_by_type_dev_coll(alert.type, alert.device_id, alert.device_session_id, alert.data_collector_id)
-
-    @classmethod
-    def find_open_by_type_dev_coll(cls, alert_type, device_id=None, device_session_id=None, data_collector_id=None, returnAll=False, gateway_id=None):
-        q = session.query(cls).join(Alert).filter(Alert.type == alert_type, cls.resolved_at == None)
+        q = session.query(cls).\
+            join(Alert).\
+            filter(Alert.type == issue_type, cls.resolved_at == None)
         if device_id:
             q = q.filter(Alert.device_id == device_id)
         if gateway_id:
             q = q.filter(Alert.gateway_id == gateway_id)
-        if device_session_id:
-            q = q.filter(Alert.device_session_id == device_session_id)
-        if data_collector_id:
-            q = q.filter(Alert.data_collector_id == data_collector_id)
-        if returnAll:
-            return q.all()
-        return q.first()
+
+        return q.all() if return_all else q.first()
 
     @classmethod
-    def put_on_quarantine(cls, alert=None, quarantine_row=None):
-        row_added = False
-        if quarantine_row is None:
-            quarantine_row = cls.find_open_by_alert(alert=alert)
-
-        if quarantine_row:
-            quarantine_row.last_checked = datetime.now()
-            session.commit()
-        else:
-            quarantine_row = cls(device_id = alert.device_id,
-                                device_session_id = alert.device_session_id,
-                                organization_id = alert.find_organization_id(alert.id),
-                                alert_id = alert.id,
-                                since = datetime.now(),
-                                last_checked = datetime.now())
-            quarantine_row.save()
-            row_added = True
-        return quarantine_row, row_added
-
-    @classmethod
-    def remove_from_quarantine_by_alert(cls, alert, res_reason_id, res_comment):
-        cls.remove_from_quarantine(alert.type, alert.device_id, alert.device_session_id,
-                                   alert.data_collector_id, res_reason_id, res_comment)
-
-    @classmethod
-    def remove_from_quarantine_manually(cls, id, user_id, res_comment):
-        qRec = cls.find_by_id(id)
-        if not qRec:
-            raise RuntimeError(f'Quarantine record with id {id} not found')
-        if qRec.resolved_at is not None:
-            raise RuntimeError(f'Quarantine is already resolved')
-        reason = QuarantineResolutionReason.find_by_type(QuarantineResolutionReasonType.MANUAL)
-        if not reason:
-            raise RuntimeError(f'Manual quarantine resolution type not found')
-        qRec.resolve(
-            resolved_by_id=user_id,
-            reason_id=reason.id,
-            comment=res_comment,
-            commit=True
-        )
-
-    @classmethod
-    def remove_from_quarantine(cls, alert_type, device_id, device_session_id, data_collector_id, res_reason_id, res_comment):
-        qrec = cls.find_open_by_type_dev_coll(alert_type, device_id, device_session_id, data_collector_id)
-        if qrec:
-            qrec.resolve(
-                reason_id=res_reason_id,
-                comment=res_comment,
-                commit=True
+    def upsert(cls, date, alert):
+        issue_row = Issue.get_with(
+            issue_type=alert.type,
+            device_id=alert.device_id,
+            gateway_id=alert.gateway_id
             )
-            return True
-        return False
+
+        if issue_row:
+            issue_row.last_checked = date.strftime(DATE_FORMAT)
+        else:
+            issue_row = Issue(
+                device_id = alert.device_id if alert.type not in Issue.gateway_issues else None,
+                organization_id = Alert.find_organization_id(alert.id),
+                alert_id = alert.id,
+                since = date.strftime(DATE_FORMAT),
+                last_checked = date.strftime(DATE_FORMAT)
+                )
+            session.add(issue_row)
+
+        session.commit()
+
+
+    @classmethod
+    def solve(cls, resolution_reason, date, issue_type, device_id=None, gateway_id=None):
+        issue_row = Issue.get_with(
+            issue_type=issue_type,
+            device_id=device_id,
+            gateway_id=gateway_id
+            )
+        if issue_row is not None:
+            issue_row.resolved_at = date.strftime(DATE_FORMAT)
+            issue_row.resolution_reason_id = 3
+            issue_row.resolution_comment = resolution_reason
+            session.commit()
+
+        return issue_row is not None
+
+
+    @classmethod
+    def has_the_issue(cls, issue_type, device_id=None, gateway_id=None):
+        issue_row = cls.get_with(issue_type, device_id=device_id, gateway_id=gateway_id, return_all=False)
+        return issue_row is not None 
 
 
 Base.metadata.create_all(engine)

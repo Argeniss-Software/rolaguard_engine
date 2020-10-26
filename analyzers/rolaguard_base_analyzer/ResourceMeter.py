@@ -1,4 +1,4 @@
-from db.Models import Device, Gateway, Quarantine, AlertType, GatewayToDevice
+from db.Models import Device, Gateway, Issue, AlertType, GatewayToDevice
 from datetime import date
 from utils import emit_alert
 import logging
@@ -6,7 +6,6 @@ import logging
 class ResourceMeter():
     # Moving average weight, must be between 0 and 1.
     # The greater the value is, the longer is the period averaged to calculate stats.
-    maw = 0.5
 
     def __init__(self):
         self.device_stats = {}  # in memory dict that stores statistics for all the recognized devices
@@ -31,7 +30,7 @@ class ResourceMeter():
 
         if type(asset) == Device:
             if asset.id in self.device_stats: # entry for this device already created in device stats dict, update values
-                if self.device_resource_usage(asset, packet):
+                if self.device_resource_usage(asset, packet, policy_manager):
                     if packet.uplink:
                         self.device_stats[asset.id]["last_fcount"] = packet.f_count
                         self.device_stats[asset.id]["last_fcount_gtw"][packet.gateway] = packet.f_count
@@ -59,7 +58,7 @@ class ResourceMeter():
                     self.device_stats[asset.id]["gateway_id"][connected_gw.gw_hex_id] = connected_gw.id
         if type(asset) == Gateway:
             if asset.id in self.gateway_stats:
-                self.gateway_resource_usage(asset, packet)
+                self.gateway_resource_usage(asset, packet, policy_manager)
             self.gateway_stats[asset.id] = {
                 "last_fcount" : packet.f_count,
                 "last_date" : packet.date
@@ -73,7 +72,7 @@ class ResourceMeter():
         return int((3 * (packet_data_length_in_characters / 4)) - (packet_data_number_of_padding_characters))
 
 
-    def device_resource_usage(self, device, packet):
+    def device_resource_usage(self, device, packet, policy_manager):
         if packet.uplink and packet.f_count == self.device_stats[device.id]["last_fcount"]:
             if (
                 packet.gateway in self.device_stats[device.id]['last_fcount_gtw'] and \
@@ -99,13 +98,14 @@ class ResourceMeter():
             # If device is reconnecting, then resolve every "not transmitting"
             # issue for this device, with reason_id 0 (problem solved automatically)
             if not device.connected:
-                issues = Quarantine.find_open_by_type_dev_coll(alert_type='LAF-401', device_id=device.id, returnAll=True)
-                for issue in issues:
-                    issue.resolve(
-                        reason_id=0,
-                        comment="The device has transmitted again",
-                        commit=False
+                res_comment = "The device has transmitted again"
+                issue_solved = Issue.solve(
+                    resolution_reason=res_comment,
+                    date=packet.date,
+                    issue_type="LAF-401",
+                    device_id=device.id,
                     )
+                if issue_solved:
                     emit_alert(
                         "LAF-600",
                         packet,
@@ -130,25 +130,31 @@ class ResourceMeter():
             time_diff = (packet.date - most_recent_date).seconds / count_diff
             if device.activity_freq:
                 freq_diff = time_diff - device.activity_freq
-                device.activity_freq = device.activity_freq + (1-self.maw) * freq_diff
-                device.activity_freq_variance = self.maw * device.activity_freq_variance + (1-self.maw)*(freq_diff**2)
+                maw = policy_manager.get_parameters("LAF-401")["moving_average_weight"]
+                device.activity_freq = device.activity_freq + (1-maw) * freq_diff
+                device.activity_freq_variance = maw * device.activity_freq_variance + (1-maw)*(freq_diff**2)
             else:
                 device.activity_freq = time_diff
                 device.activity_freq_variance = 0
 
-            # Update the mean number of packets lost
+            # Update the number of packets lost
             packet.npackets_lost_found = count_diff-1
+
+            # TODO: this stat update should be removed, after remove it form the back end
             if device.npackets_lost:
-                device.npackets_lost = self.maw * device.npackets_lost + (1-self.maw) * (count_diff-1)
+                maw = 0.9
+                device.npackets_lost = maw * device.npackets_lost + (1-maw) * (count_diff-1)
             else:
                 device.npackets_lost = count_diff-1
+            
 
             # Update the max (from all the gateways) rssi of the device
             if packet.rssi is not None:
                 if packet.gateway in self.device_stats[device.id]["rssi"]:
+                    maw = policy_manager.get_parameters("LAF-100")["moving_average_weight"]
                     self.device_stats[device.id]["rssi"][packet.gateway] = \
-                        self.maw *  self.device_stats[device.id]["rssi"][packet.gateway] + \
-                        (1 - self.maw) * packet.rssi
+                        maw *  self.device_stats[device.id]["rssi"][packet.gateway] + \
+                        (1 - maw) * packet.rssi
                 else:
                     self.device_stats[device.id]["rssi"][packet.gateway] = packet.rssi
 
@@ -159,9 +165,10 @@ class ResourceMeter():
             # Update the max lsnr value of the device, considering all the gateways
             if packet.lsnr is not None:
                 if packet.gateway in self.device_stats[device.id]["lsnr"]:
+                    maw = policy_manager.get_parameters("LAF-102")["moving_average_weight"]
                     self.device_stats[device.id]["lsnr"][packet.gateway] = \
-                        self.maw *  self.device_stats[device.id]["lsnr"][packet.gateway] + \
-                        (1 - self.maw) * packet.lsnr
+                        maw *  self.device_stats[device.id]["lsnr"][packet.gateway] + \
+                        (1 - maw) * packet.lsnr
                 else:
                     self.device_stats[device.id]["lsnr"][packet.gateway] = packet.lsnr
 
@@ -174,7 +181,7 @@ class ResourceMeter():
         return True
 
 
-    def gateway_resource_usage(self, gateway, packet):
+    def gateway_resource_usage(self, gateway, packet, policy_manager):
         gateway.npackets_up += 1 if packet.uplink else 0
         gateway.npackets_down += 1 if not packet.uplink else 0
         gateway.last_activity = packet.date
@@ -182,20 +189,21 @@ class ResourceMeter():
         # If gateway is reconnecting, then resolve every "not transmitting"
         # issue for this gateway, with reason_id 0 (problem solved automatically)
         if not gateway.connected:
-            issues = Quarantine.find_open_by_type_dev_coll(alert_type='LAF-403', gateway_id=gateway.id, returnAll=True)
-            for issue in issues:
-                issue.resolve(
-                    reason_id=0,
-                    comment="The gateway has transmitted again",
-                    commit=False
+            res_comment = "The gateway has transmitted again"
+            issue_solved = Issue.solve(
+                resolution_reason=res_comment,
+                date=packet.date,
+                issue_type="LAF-403",
+                gateway_id=gateway.id,
                 )
+            if issue_solved:
                 emit_alert(
                     "LAF-600",
                     packet,
                     gateway = gateway,
                     alert_solved_type = "LAF-403",
                     alert_solved = AlertType.find_one_by_code("LAF-403").name,
-                    resolution_reason = "The gateway has transmitted again"
+                    resolution_reason = res_comment
                 )
 
         gateway.connected = True
@@ -203,7 +211,8 @@ class ResourceMeter():
         # Update activity_freq (which is the time between packets)
         time_diff = (packet.date - self.gateway_stats[gateway.id]["last_date"]).seconds
         if gateway.activity_freq:
-            gateway.activity_freq = self.maw * gateway.activity_freq + (1-self.maw) * time_diff
+            maw = policy_manager.get_parameters("LAF-102")["moving_average_weight"]
+            gateway.activity_freq = maw * gateway.activity_freq + (1-maw) * time_diff
         else:
             gateway.activity_freq = time_diff
 

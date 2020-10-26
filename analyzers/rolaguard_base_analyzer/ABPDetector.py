@@ -2,7 +2,7 @@ from collections import defaultdict
 import logging as log
 
 from utils.AlertGenerator import emit_alert
-from db.Models import DataCollector, Quarantine, AlertType
+from db.Models import DataCollector, Issue, AlertType
 
 
 
@@ -37,13 +37,11 @@ class ABPDetector():
             )
         ):
             res_comment = "The device has sent a join request"
-            issue_solved = Quarantine.remove_from_quarantine(
-                "LAF-006",
-                device_id = device.id,
-                device_session_id = None,
-                data_collector_id = packet.data_collector_id,
-                res_reason_id = 3,
-                res_comment = res_comment
+            issue_solved = Issue.solve(
+                resolution_reason=res_comment,
+                date=packet.date,
+                issue_type="LAF-006",
+                device_id=device.id,
                 )
             if issue_solved:
                 emit_alert(
