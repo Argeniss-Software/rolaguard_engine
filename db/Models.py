@@ -1059,18 +1059,19 @@ class Issue(Base):
 
     @classmethod
     def get_with(cls, issue_type, device_id=None, gateway_id=None, return_all=False):
-        if device_id is None and issue_type not in cls.gateway_issues:
-            raise Exception(f"Must provide a device_id for the issue {issue_type}")
-        if gateway_id is None and issue_type in cls.gateway_issues:
-            raise Exception(f"Must provide a gateway_id for the issue {issue_type}")
-
         q = session.query(cls).\
             join(Alert).\
             filter(Alert.type == issue_type, cls.resolved_at == None)
-        if device_id:
-            q = q.filter(Alert.device_id == device_id)
-        if gateway_id:
+
+        if issue_type in cls.gateway_issues:
+            if gateway_id is None:
+                raise Exception(f"Must provide a gateway_id for the issue {issue_type}")
             q = q.filter(Alert.gateway_id == gateway_id)
+        else:
+            if device_id is None:
+                raise Exception(f"Must provide a device_id for the issue {issue_type}")
+            q = q.filter(Alert.device_id == device_id)
+
 
         return q.all() if return_all else q.first()
 
