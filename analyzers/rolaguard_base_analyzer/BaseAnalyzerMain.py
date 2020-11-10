@@ -1,9 +1,9 @@
-import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
+import logging as log
 from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Issue, DeviceVendorPrefix, AlertType, \
-    DeviceCounters, CounterType
+    Packet, DataCollector, Issue, AlertType
 from utils import emit_alert
+from db.TableCache import ObjectTableCache, AssociationTableCache
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
@@ -14,6 +14,11 @@ from analyzers.rolaguard_base_analyzer.CheckPacketsLost import CheckPacketsLost
 
 from utils import Chronometer
 
+# comment to disable caching
+Gateway = ObjectTableCache(Gateway, max_cached_items=10000)
+Device = ObjectTableCache(Device, max_cached_items=10000)
+DeviceSession = ObjectTableCache(DeviceSession, max_cached_items=10000)
+GatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
 
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
@@ -97,7 +102,7 @@ def process_packet(packet, policy):
     ## Associations
     chrono.start("dev2sess")
     if device and gateway:
-        GatewayToDevice.associate(gateway_id=gateway.id, device_id=device.id)
+        GatewayToDevice.associate(gateway.id, device.id)
     chrono.stop()
 
     ## Associate device with device_session
