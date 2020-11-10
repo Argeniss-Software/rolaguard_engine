@@ -18,7 +18,7 @@ from utils import Chronometer
 Gateway = ObjectTableCache(Gateway, max_cached_items=10000)
 Device = ObjectTableCache(Device, max_cached_items=10000)
 DeviceSession = ObjectTableCache(DeviceSession, max_cached_items=10000)
-# GatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
+GatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
 
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
