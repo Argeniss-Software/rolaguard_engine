@@ -74,6 +74,7 @@ class PolicyManager():
     def subscribe_to_events(self):
         try:
             def connect_to_mq():
+                time.sleep(2)
                 rabbit_credentials = pika.PlainCredentials(username = os.environ["RABBITMQ_DEFAULT_USER"],
                                                            password = os.environ["RABBITMQ_DEFAULT_PASS"])
                 rabbit_parameters = pika.ConnectionParameters(host = os.environ["RABBITMQ_HOST"],
