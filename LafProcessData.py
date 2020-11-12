@@ -149,7 +149,6 @@ def processData():
                         if options.analyze_ia and ia_analyzer_row.last_row < packet.id:
                             ai_analyzer.process_packet(packet, policy_manager)
                             ia_analyzer_row.last_row = packet.id
-                    inner_chrono.stop()
 
                     # If the starting packet was given by the user, don't do any check
                     else:
@@ -167,6 +166,7 @@ def processData():
                             ai_analyzer.process_packet(packet, policy_manager)
                             if ia_analyzer_row.last_row  < packet.id:
                                 ia_analyzer_row.last_row = packet.id
+                    inner_chrono.stop()
                             
                 except Exception as e:
                     log.error("Error processing packet {0}. Exception: {1}".format(packet.id ,e))
@@ -184,7 +184,6 @@ def processData():
                 except Exception as exc:
                     rollback()
                     log.error("Error trying to commit after packet processing finish: {0}".format(exc))
-                inner_chrono.lap()
                 
             if options.report_stats:
                 chrono.start("stats")
