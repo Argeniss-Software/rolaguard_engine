@@ -18,7 +18,7 @@ from utils import Chronometer
 Gateway = ObjectTableCache(Gateway, max_cached_items=10000)
 Device = ObjectTableCache(Device, max_cached_items=10000)
 DeviceSession = ObjectTableCache(DeviceSession, max_cached_items=10000)
-GatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
+# GatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
 
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
@@ -95,7 +95,7 @@ def process_packet(packet, policy):
     chrono.stop()
 
     ## Associations
-    chrono.start("dev2sess")
+    chrono.start("gw2dev")
     if device and gateway:
         GatewayToDevice.associate(gateway.id, device.id)
     chrono.stop()
@@ -113,6 +113,7 @@ def process_packet(packet, policy):
         device_session.device_id = device.id
     chrono.stop()
 
+    chrono.start("guesses")
     ## If the packet does not have a gateway, try to guess from the device
     if gateway is None and device:
         possible_gateways = GatewayToDevice.associated_with(device.id)
@@ -122,6 +123,7 @@ def process_packet(packet, policy):
     ## If the packet does not have a dev_eui, try to guess from the device_session
     if device is None and device_session and device_session.device_id:
         device = Device.get(device_session.device_id)
+    chrono.stop()
 
 
     chrono.start("checks")
@@ -287,5 +289,6 @@ def process_packet(packet, policy):
             lsnr=device.max_lsnr
         )
 
+    chrono.stop("update")
     chrono.stop("total")
     chrono.lap()
