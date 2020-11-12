@@ -25,7 +25,7 @@ bruteforce_analyzer = None
 LafPrinter = None
 
 chrono = Chronometer(report_every=REPORT_EVERY, chrono_name="main")
-inner_chrono = Chronometer(report_every=REPORT_EVERY, chrono_name="process")
+inner_chrono = Chronometer(report_every=BATCH_LENGTH * REPORT_EVERY, chrono_name="process")
 
 def processData():
     # Save the packet ids that have to be processed by the selected modules
