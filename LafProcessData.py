@@ -184,7 +184,7 @@ def processData():
                 except Exception as exc:
                     rollback()
                     log.error("Error trying to commit after packet processing finish: {0}".format(exc))
-                inner_chrono.stop()
+                inner_chrono.lap()
                 
             if options.report_stats:
                 chrono.start("stats")
