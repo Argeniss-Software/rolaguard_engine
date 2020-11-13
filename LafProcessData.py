@@ -114,15 +114,15 @@ def processData():
                 keep_iterating = False
 
         if session_packets is not None:
-            chrono.start("RP")
+            chrono.start("get row processed")
             main_analyzer_last_row = RowProcessed.find_one_by_analyzer("packet_analyzer").last_row
             chrono.stop()
-            chrono.start("proccess")
+            chrono.start("proccess packet")
             for packet in session_packets:
                 # log.debug("Using packet: %d"%(packet.id))
 
-                inner_chrono.start("policy")
-                policy_manager.use_policy(packet.organization_id, packet.data_collector_id)
+                inner_chrono.start("Set policy")
+                policy_manager.use_policy(packet.data_collector_id)
                 inner_chrono.stop()
                 # log.debug("Using policy: {name} ({id})".\
                     #format(name = policy_manager.active_policy.name,

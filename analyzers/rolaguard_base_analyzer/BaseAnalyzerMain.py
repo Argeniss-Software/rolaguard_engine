@@ -33,7 +33,7 @@ abp_detector = ABPDetector()
 check_retransmissions = CheckRetransmissions()
 check_packets_lost = CheckPacketsLost()
 
-chrono = Chronometer(report_every=1000, chrono_name="base")
+chrono = Chronometer(report_every=4096, chrono_name="base")
 
 def process_packet(packet, policy):
     chrono.start("total")
