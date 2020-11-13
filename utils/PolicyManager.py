@@ -16,11 +16,11 @@ class PolicyManager():
 
     def use_policy(self, data_collector_id):
         try:
+            if self.needs_reloading:
+                self.reload_policies()
             if self.active_dc_id != data_collector_id:
                 self.active_policy = self.policy[self.policy_by_dc[data_collector_id]]
                 self.active_dc_id = data_collector_id
-            if self.needs_reloading:
-                self.reload_policies()
         except Exception as exc:
             log.error(f"Error trying to change the active policy: {exc}")
 
@@ -92,8 +92,6 @@ class PolicyManager():
 
     def _handle_events(self, ch, method, properties, body):
         try:
-            while self.block_policy_loading:
-                time.sleep(1)
             self.needs_reloading = True
         except Exception as exc:
             log.error(f"Could not handle policy event. Exception: {exc}")
