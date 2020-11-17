@@ -2,6 +2,7 @@ import pika
 import json
 import os
 import logging
+import time
 
 from threading import Thread
 
@@ -9,7 +10,8 @@ from threading import Thread
 def emit_alert_event(type, data):
 
     def emitter():
-        try:    
+        try:
+            time.sleep(2)
             rabbit_credentials = pika.PlainCredentials(os.environ.get("RABBITMQ_DEFAULT_USER"), os.environ.get("RABBITMQ_DEFAULT_PASS"))
             connection = pika.BlockingConnection(pika.ConnectionParameters(host=os.environ.get("RABBITMQ_HOST"), port=os.environ.get("RABBITMQ_PORT"), credentials=rabbit_credentials))
             channel = connection.channel()

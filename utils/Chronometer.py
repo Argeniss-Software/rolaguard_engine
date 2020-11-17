@@ -3,12 +3,13 @@ import logging as log
 
 
 class Chronometer():
-    def __init__(self, report_every):
+    def __init__(self, report_every, chrono_name=""):
         self.report_every = report_every
         self.n_laps = 0
         self.period_start = {}
         self.elapsed_time = {}
         self.last_name = None
+        self.chrono_name = chrono_name
 
     def start(self, name):
         self.period_start[name] = dt.datetime.now()
@@ -28,7 +29,7 @@ class Chronometer():
 
         if self.n_laps >= self.report_every:
             self.n_laps = 0
-            mess = 'Chronometer:'
+            mess = f'Chronometer {self.chrono_name}'
             for k, v in self.elapsed_time.items():
                 mess += f"\t{k}: {v:.4}"
             log.debug(mess)

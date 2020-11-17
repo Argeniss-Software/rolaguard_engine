@@ -2,6 +2,7 @@
 # Copyright (c) 2019 IOActive Inc.  All rights reserved.
 
 import argparse, sys, time, os, datetime as dt, traceback, logging as log, importlib, json
+from utils.Chronometer import Chronometer
 from db.Models import RowProcessed, Packet, commit, rollback
 from utils import PolicyManager
 
@@ -22,6 +23,9 @@ ai_analyzer = None
 base_analyzer = None
 bruteforce_analyzer = None
 LafPrinter = None
+
+chrono = Chronometer(report_every=REPORT_EVERY, chrono_name="main")
+inner_chrono = Chronometer(report_every=BATCH_LENGTH * REPORT_EVERY, chrono_name="process")
 
 def processData():
     # Save the packet ids that have to be processed by the selected modules
@@ -84,7 +88,9 @@ def processData():
         # Select the quantity of packets to process according to PACKES_BATCH and the limit that the user may have provided
         if options.to_id is None:
             if (start_packet_id + BATCH_LENGTH + 1) <= number_of_packets:
+                chrono.start("fetch")
                 session_packets = Packet.find_all_from(start_packet_id, BATCH_LENGTH)
+                chrono.stop()
                 start_packet_id += BATCH_LENGTH
 
             else:
@@ -108,11 +114,16 @@ def processData():
                 keep_iterating = False
 
         if session_packets is not None:
+            chrono.start("get row processed")
             main_analyzer_last_row = RowProcessed.find_one_by_analyzer("packet_analyzer").last_row
+            chrono.stop()
+            chrono.start("proccess packet")
             for packet in session_packets:
                 # log.debug("Using packet: %d"%(packet.id))
 
-                policy_manager.use_policy(packet.organization_id, packet.data_collector_id)
+                inner_chrono.start("Set policy")
+                policy_manager.use_policy(packet.data_collector_id)
+                inner_chrono.stop()
                 # log.debug("Using policy: {name} ({id})".\
                     #format(name = policy_manager.active_policy.name,
                     #       id = policy_manager.active_policy.id))
@@ -125,6 +136,7 @@ def processData():
 
                 try:
                     # If the starting packet wasn't given, check if the packet wasn't processed by each analyzer (except for the parser, which doesn't modify the DB)
+                    inner_chrono.start("process")
                     if options.from_id is None:
                         if options.bforce and bruteforcer_row.last_row < packet.id:
                             bruteforce_analyzer.process_packet(packet, policy_manager)
@@ -154,6 +166,7 @@ def processData():
                             ai_analyzer.process_packet(packet, policy_manager)
                             if ia_analyzer_row.last_row  < packet.id:
                                 ia_analyzer_row.last_row = packet.id
+                    inner_chrono.stop()
                             
                 except Exception as e:
                     log.error("Error processing packet {0}. Exception: {1}".format(packet.id ,e))
@@ -165,12 +178,16 @@ def processData():
 
                 # Commit objects in DB before starting with the next packet
                 try:
+                    inner_chrono.start("commit")
                     commit()
+                    inner_chrono.stop()
                 except Exception as exc:
                     rollback()
                     log.error("Error trying to commit after packet processing finish: {0}".format(exc))
+                inner_chrono.lap()
                 
             if options.report_stats:
+                chrono.start("stats")
                 if report_last_print >= REPORT_EVERY:
                     packet_row_quantity = Packet.rows_quantity()
 
@@ -186,6 +203,8 @@ def processData():
                     report_last_print = 0
                 else:
                     report_last_print += 1
+                chrono.start("stop")
+        chrono.lap()
 
 def import_analyzers():
     if options.parse:

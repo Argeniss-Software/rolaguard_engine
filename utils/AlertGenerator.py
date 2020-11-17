@@ -1,5 +1,5 @@
-import datetime, os, json, logging 
-from db.Models import Alert, Issue, Gateway, GatewayToDevice, GatewayToDeviceSession, Device, \
+import datetime, json, logging 
+from db.Models import Alert, Issue, Gateway, Device, \
     DeviceSession, AlertType, DataCollector, Packet, DATE_FORMAT
 from mq.AlertEvent import emit_alert_event
 
@@ -58,17 +58,17 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
         global alert_blocked_by
         blocked = False
 
-        is_gateway_alert = alert_type in gateway_alerts
-
-
-        for blocking_issue in alert_blocked_by.get(alert_type, []):
-            if Issue.has_the_issue(
-                issue_type=blocking_issue,
-                device_id=device.id if device else None,
-                gateway_id=gateway.id
-            ):
-                blocked = True
-                break
+        try:
+            for blocking_issue in alert_blocked_by.get(alert_type, []):
+                if Issue.has_the_issue(
+                    issue_type=blocking_issue,
+                    device_id=device.id if device else None,
+                    gateway_id=gateway.id
+                ):
+                    blocked = True
+                    break
+        except:
+            pass # We can't check if the issue exists, then, we let blocked=False
         
         alert = Alert(
             type = alert_type,
@@ -95,7 +95,10 @@ def emit_alert(alert_type, packet, device=None, device_session=None, gateway=Non
             emit_alert_event('NEW', params)
 
         is_an_issue = any([alert_type in l for l in alert_blocked_by.values()])
-        if is_an_issue: Issue.upsert(packet.date, alert)
+        try:
+            if is_an_issue: Issue.upsert(packet.date, alert)
+        except:
+            pass # We can't upsert the issue, then, do nothing
 
     except Exception as exc:
         logging.error(f"Error trying to emit alert {alert_type}: {exc}")

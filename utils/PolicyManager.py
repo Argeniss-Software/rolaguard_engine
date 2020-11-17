@@ -10,23 +10,17 @@ from db.Models import Policy
 
 class PolicyManager():
     def __init__(self):
-        self.policies = { p.id : p for p in self.getPoliciesAndDataCollectors() }
-        self.active_policy = None
-        self.active_dc_id = None
-        self.block_policy_loading = False
+        self.reload_policies()
+        self.needs_reloading = False
 
-    def use_policy(self, organization_id, data_collector_id):
-        if self.active_policy and (self.active_policy.organization_id == organization_id or self.active_policy.organization_id is None) and self.active_dc_id == data_collector_id:
-          return
 
+    def use_policy(self, data_collector_id):
         try:
-            self.block_policy_loading = True
-            for policy in self.policies.values():
-                if policy.organization_id == organization_id or policy.organization_id is None and data_collector_id in policy.data_collector_ids:
-                    self.active_policy = policy
-                    self.active_dc_id = data_collector_id
-                    break
-            self.block_policy_loading = False
+            if self.needs_reloading:
+                self.reload_policies()
+            if self.active_dc_id != data_collector_id:
+                self.active_policy = self.policy[self.policy_by_dc[data_collector_id]]
+                self.active_dc_id = data_collector_id
         except Exception as exc:
             log.error(f"Error trying to change the active policy: {exc}")
 
@@ -74,6 +68,7 @@ class PolicyManager():
     def subscribe_to_events(self):
         try:
             def connect_to_mq():
+                time.sleep(2)
                 rabbit_credentials = pika.PlainCredentials(username = os.environ["RABBITMQ_DEFAULT_USER"],
                                                            password = os.environ["RABBITMQ_DEFAULT_PASS"])
                 rabbit_parameters = pika.ConnectionParameters(host = os.environ["RABBITMQ_HOST"],
@@ -97,28 +92,14 @@ class PolicyManager():
 
     def _handle_events(self, ch, method, properties, body):
         try:
-            while self.block_policy_loading:
-                time.sleep(1)
-
-            event = json.loads(body.decode('utf-8'))
-            log.debug(f"New event on policies_events: {event}")
-            policy_id = event['data']['id']
-            if (event['type'] == 'CREATED') or (event['type'] == 'UPDATED'):
-                policy = Policy.find_one(policy_id)
-                self.policies[policy_id] = policy
-            elif event['type'] == 'DELETED':
-                del self.policies[policy_id]
+            self.needs_reloading = True
         except Exception as exc:
             log.error(f"Could not handle policy event. Exception: {exc}")
             return
 
-    def getPoliciesAndDataCollectors(self):
-        policies = Policy.find()
-        for p in policies:
-            dcs = []
-            for dc in p.data_collectors:
-                dcs.append(dc.id)
-            p.data_collector_ids = dcs
-        return policies
-
-
+    def reload_policies(self):
+        self.policy = {p.id : p for p in Policy.find()}
+        self.policy_by_dc = {dc.id : p.id for p in self.policy.values() for dc in p.data_collectors}
+        self.active_dc_id = None
+        self.active_policy = None
+        self.needs_reloading = False

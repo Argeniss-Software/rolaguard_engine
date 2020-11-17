@@ -1,9 +1,9 @@
-import re, datetime, os, sys, base64, json, logging, math, datetime as dt, logging as log
+import logging as log
 from collections import defaultdict
 from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Issue, DeviceVendorPrefix, AlertType, \
-    DeviceCounters, CounterType
+    Packet, DataCollector, Issue, AlertType
 from utils import emit_alert
+from db.TableCache import ObjectTableCache, AssociationTableCache
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
@@ -14,6 +14,11 @@ from analyzers.rolaguard_base_analyzer.CheckPacketsLost import CheckPacketsLost
 
 from utils import Chronometer
 
+# comment to disable caching
+Gateway = ObjectTableCache(Gateway, max_cached_items=10000)
+Device = ObjectTableCache(Device, max_cached_items=10000)
+DeviceSession = ObjectTableCache(DeviceSession, max_cached_items=10000)
+# GatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
 
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
@@ -28,7 +33,7 @@ abp_detector = ABPDetector()
 check_retransmissions = CheckRetransmissions()
 check_packets_lost = CheckPacketsLost()
 
-chrono = Chronometer(report_every=1000)
+chrono = Chronometer(report_every=4096, chrono_name="base")
 
 def process_packet(packet, policy):
     chrono.start("total")
@@ -50,11 +55,6 @@ def process_packet(packet, policy):
         gateway.save()
         if policy.is_enabled("LAF-402"):
             emit_alert("LAF-402", packet, gateway = gateway)
-
-    ## Device instantiation
-    if device is None and packet.dev_eui:
-        device = Device.create_from_packet(packet)
-        device.save()
 
     ## Device instantiation
     if device is None and packet.dev_eui:
@@ -95,9 +95,9 @@ def process_packet(packet, policy):
     chrono.stop()
 
     ## Associations
-    chrono.start("dev2sess")
+    chrono.start("gw2dev")
     if device and gateway:
-        GatewayToDevice.associate(gateway_id=gateway.id, device_id=device.id)
+        GatewayToDevice.associate(gateway.id, device.id)
     chrono.stop()
 
     ## Associate device with device_session
@@ -113,6 +113,7 @@ def process_packet(packet, policy):
         device_session.device_id = device.id
     chrono.stop()
 
+    chrono.start("guesses")
     ## If the packet does not have a gateway, try to guess from the device
     if gateway is None and device:
         possible_gateways = GatewayToDevice.associated_with(device.id)
@@ -122,6 +123,7 @@ def process_packet(packet, policy):
     ## If the packet does not have a dev_eui, try to guess from the device_session
     if device is None and device_session and device_session.device_id:
         device = Device.get(device_session.device_id)
+    chrono.stop()
 
 
     chrono.start("checks")
@@ -287,5 +289,6 @@ def process_packet(packet, policy):
             lsnr=device.max_lsnr
         )
 
+    chrono.stop("update")
     chrono.stop("total")
     chrono.lap()
