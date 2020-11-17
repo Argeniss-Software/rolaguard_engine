@@ -102,3 +102,4 @@ class PolicyManager():
         self.policy_by_dc = {dc.id : p.id for p in self.policy.values() for dc in p.data_collectors}
         self.active_dc_id = None
         self.active_policy = None
+        self.needs_reloading = False
