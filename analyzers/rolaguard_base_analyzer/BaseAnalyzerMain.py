@@ -1,9 +1,14 @@
 import logging as log
 from collections import defaultdict
-from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Issue, AlertType
+from db.Models import DevNonce, Packet, DataCollector, Issue, AlertType
+from db.Models import (
+    cGateway as Gateway,
+    cDevice as Device,
+    cDeviceSession as DeviceSession,
+    cGatewayToDevice as GatewayToDevice,
+)
+from db import session
 from utils import emit_alert
-from db.TableCache import ObjectTableCache, AssociationTableCache
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession
@@ -13,12 +18,6 @@ from analyzers.rolaguard_base_analyzer.CheckRetransmissions import CheckRetransm
 from analyzers.rolaguard_base_analyzer.CheckPacketsLost import CheckPacketsLost
 
 from utils import Chronometer
-
-# comment to disable caching
-Gateway = ObjectTableCache(Gateway, max_cached_items=10000)
-Device = ObjectTableCache(Device, max_cached_items=10000)
-DeviceSession = ObjectTableCache(DeviceSession, max_cached_items=10000)
-# GatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
 
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
@@ -87,7 +86,7 @@ def process_packet(packet, policy):
     ## Emit new device alert if it is the first data packet
     if device and device_session and device.pending_first_connection:
         device.pending_first_connection = False
-        device.db_update()
+        session.commit()
         if policy.is_enabled("LAF-400"):
             emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
                     number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
@@ -111,6 +110,7 @@ def process_packet(packet, policy):
                             new_dev_eui = device.dev_eui,
                             prev_packet_id = device_session.last_packet_id)
         device_session.device_id = device.id
+        session.commit()
     chrono.stop()
 
     chrono.start("guesses")
@@ -199,11 +199,11 @@ def process_packet(packet, policy):
                     if device and device.has_joined:
                         # The counter = 0  is valid, then change the has_joined flag
                         device.has_joined = False
-
                     elif device and device.join_inferred:
                         # The counter = 0  is valid, then change the join_inferred flag
                         device.join_inferred = False
                     device_session.reset_counter += 1
+                    session.commit()
         last_uplink_mic[device_session.id]= packet.mic
 
     # Check alert LAF-007

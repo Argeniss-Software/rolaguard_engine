@@ -65,6 +65,12 @@ class AssociationTableCache():
         else:
             self.table.associate(item_1, item_2)
             self.add_to_cache(item_1, [item_2])
+    
+    def delete(self, item_1, item_2):
+        if item_1 in self.cached_items and item_2 in self.cached_items[item_1]:
+            self.table.delete(item_1, item_2)
+            self.cached_items[item_1].remove(item_2)
+
 
     def add_to_cache(self, item_1, items):
         # TODO: improve the garbage collection to reduce cache misses

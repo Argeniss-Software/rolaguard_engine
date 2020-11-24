@@ -326,9 +326,6 @@ class Device(Base):
         except Exception as exc:
             log.error(f"Error creating device: {exc}")
 
-    def db_update(self):
-        session.commit()
-        
     def update_state(self, packet):
         try:
             if packet.join_eui:
@@ -415,6 +412,7 @@ class DeviceCounters(Base):
                 value = delta,
                 last_update = packet_date
             ))
+            session.commit()
         else:
             if( # If the counter is outdated, then reset it
                 packet_date.year != curCounter.last_update.year or \
@@ -492,6 +490,7 @@ class GatewayCounters(Base):
                 value = delta,
                 last_update = packet_date
             ))
+            session.commit()
         else:
             if( # If the counter is outdated, then reset it
                 packet_date.year != curCounter.last_update.year or \
@@ -1120,3 +1119,10 @@ class Issue(Base):
 
 
 Base.metadata.create_all(engine)
+
+from db.TableCache import ObjectTableCache, AssociationTableCache
+
+cGateway = ObjectTableCache(Gateway, max_cached_items=10000)
+cDevice = ObjectTableCache(Device, max_cached_items=10000)
+cDeviceSession = ObjectTableCache(DeviceSession, max_cached_items=10000)
+cGatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
