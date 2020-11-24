@@ -91,15 +91,15 @@ class PolicyManager():
 
 
     def _handle_events(self, ch, method, properties, body):
-        try:
-            self.needs_reloading = True
-        except Exception as exc:
-            log.error(f"Could not handle policy event. Exception: {exc}")
-            return
+        self.needs_reloading = True
 
     def reload_policies(self):
-        self.policy = {p.id : p for p in Policy.find()}
-        self.policy_by_dc = {dc.id : p.id for p in self.policy.values() for dc in p.data_collectors}
-        self.active_dc_id = None
-        self.active_policy = None
-        self.needs_reloading = False
+        try:
+            self.policy = {p.id : p for p in Policy.find()}
+            self.policy_by_dc = {dc.id : p.id for p in self.policy.values() for dc in p.data_collectors}
+            self.active_dc_id = None
+            self.active_policy = None
+            self.needs_reloading = False
+        except Exception as exc:
+            log.error(f"Error reloading policies:\n{exc}")
+
