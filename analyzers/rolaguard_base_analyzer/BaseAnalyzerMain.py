@@ -102,15 +102,15 @@ def process_packet(packet, policy):
     ## Associate device with device_session
     chrono.start("dev2sess")
     if device and device_session:   
-        # Check if this DeviceSession hadn't previously a Device (LAF-002)
-        if device_session.device_id is not None and device.id != device_session.device_id and policy.is_enabled("LAF-002"):   
+        if device_session.device_id is not None and device.id != device_session.device_id and policy.is_enabled("LAF-002"):
                 conflict_device_obj = Device.get(device_session.device_id)
                 emit_alert("LAF-002", packet, device=device, device_session=device_session, gateway=gateway,
                             old_dev_eui = conflict_device_obj.dev_eui,
                             new_dev_eui = device.dev_eui,
                             prev_packet_id = device_session.last_packet_id)
-        device_session.device_id = device.id
-        session.commit()
+        if device_session.device_id is None or device.id != device_session.device_id:
+            device_session.device_id = device.id
+            session.commit()
     chrono.stop()
 
     chrono.start("guesses")
