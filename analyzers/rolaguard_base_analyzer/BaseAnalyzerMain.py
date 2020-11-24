@@ -164,7 +164,7 @@ def process_packet(packet, policy):
     if packet.m_type == "JoinRequest" and device:
         # Check if DevNonce is repeated and save it
         prev_packet_id = DevNonce.saveIfNotExists(packet.dev_nonce, device.id, packet.id) 
-        if prev_packet_id and (device.has_joined or device.join_inferred):
+        if prev_packet_id and device.has_joined:
             device.repeated_dev_nonce = True
         
             if policy.is_enabled("LAF-001"):
@@ -173,19 +173,6 @@ def process_packet(packet, policy):
                             prev_packet_id=prev_packet_id)
         elif not(prev_packet_id):
             device.has_joined=False
-            device.join_inferred=False
-
-    
-    elif packet.m_type == "JoinAccept":
-        # If we don't know the deveui, check if the last packet received in that datacollector is a JoinReq
-        if packet.dev_eui is None:
-            last_packet= Packet.find_previous_by_data_collector_and_dev_eui(packet.date, packet.data_collector_id, None)
-            if last_packet is not None and last_packet.m_type == "JoinRequest":
-                    device = Device.find_with(dev_eui = last_packet.dev_eui, data_collector_id = last_packet.organization_id)
-                    if device is not None:
-                        device.join_accept_counter+= 1
-                        device.join_inferred= True
-
 
     is_uplink_packet = packet.m_type in ["UnconfirmedDataUp", "ConfirmedDataUp"]
     if device_session and is_uplink_packet and packet.f_count is not None:
@@ -199,9 +186,6 @@ def process_packet(packet, policy):
                     if device and device.has_joined:
                         # The counter = 0  is valid, then change the has_joined flag
                         device.has_joined = False
-                    elif device and device.join_inferred:
-                        # The counter = 0  is valid, then change the join_inferred flag
-                        device.join_inferred = False
                     device_session.reset_counter += 1
                     session.commit()
         last_uplink_mic[device_session.id]= packet.mic
