@@ -102,4 +102,3 @@ class PolicyManager():
             self.needs_reloading = False
         except Exception as exc:
             log.error(f"Error reloading policies:\n{exc}")
-

@@ -9,6 +9,7 @@ from db.Models import (
 )
 from db import session
 from utils import emit_alert
+from db.TableCache import ObjectTableCache, AssociationTableCache
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
 from analyzers.rolaguard_base_analyzer.DeviceIdentifier import DeviceIdentifier
 from analyzers.rolaguard_base_analyzer.CheckDuplicatedSession import CheckDuplicatedSession

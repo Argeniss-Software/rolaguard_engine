@@ -119,6 +119,7 @@ def processData():
             chrono.stop()
             chrono.start("proccess packet")
             for packet in session_packets:
+              
                 inner_chrono.start("Set policy")
                 policy_manager.use_policy(packet.data_collector_id)
                 inner_chrono.stop()
@@ -182,6 +183,7 @@ def processData():
                 log.error("Error trying to commit after packet processing finish: {0}".format(exc))
                 
             if options.report_stats:
+                chrono.start("stats")
                 if report_last_print >= REPORT_EVERY:
                     packet_row_quantity = Packet.rows_quantity()
 
