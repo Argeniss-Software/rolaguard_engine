@@ -1,7 +1,13 @@
 import logging as log
 from collections import defaultdict
-from db.Models import DevNonce, Gateway, Device, DeviceSession, GatewayToDevice, \
-    Packet, DataCollector, Issue, AlertType
+from db.Models import DevNonce, Packet, DataCollector, Issue, AlertType
+from db.Models import (
+    cGateway as Gateway,
+    cDevice as Device,
+    cDeviceSession as DeviceSession,
+    cGatewayToDevice as GatewayToDevice,
+)
+from db import session
 from utils import emit_alert
 from db.TableCache import ObjectTableCache, AssociationTableCache
 from analyzers.rolaguard_base_analyzer.ResourceMeter import ResourceMeter
@@ -13,12 +19,6 @@ from analyzers.rolaguard_base_analyzer.CheckRetransmissions import CheckRetransm
 from analyzers.rolaguard_base_analyzer.CheckPacketsLost import CheckPacketsLost
 
 from utils import Chronometer
-
-# comment to disable caching
-Gateway = ObjectTableCache(Gateway, max_cached_items=10000)
-Device = ObjectTableCache(Device, max_cached_items=10000)
-DeviceSession = ObjectTableCache(DeviceSession, max_cached_items=10000)
-# GatewayToDevice = AssociationTableCache(GatewayToDevice, max_cached_items=10000)
 
 # TODO: delete unused mics to avoid fill up memory.
 # Dict containing (device_session_id:last_uplink_mic). Here it will be saved last uplink messages' MIC 
@@ -87,7 +87,7 @@ def process_packet(packet, policy):
     ## Emit new device alert if it is the first data packet
     if device and device_session and device.pending_first_connection:
         device.pending_first_connection = False
-        device.db_update()
+        session.commit()
         if policy.is_enabled("LAF-400"):
             emit_alert("LAF-400", packet, device=device, gateway=gateway, device_session=device_session,
                     number_of_devices = DataCollector.number_of_devices(packet.data_collector_id))
@@ -103,14 +103,15 @@ def process_packet(packet, policy):
     ## Associate device with device_session
     chrono.start("dev2sess")
     if device and device_session:   
-        # Check if this DeviceSession hadn't previously a Device (LAF-002)
-        if device_session.device_id is not None and device.id != device_session.device_id and policy.is_enabled("LAF-002"):   
+        if device_session.device_id is not None and device.id != device_session.device_id and policy.is_enabled("LAF-002"):
                 conflict_device_obj = Device.get(device_session.device_id)
                 emit_alert("LAF-002", packet, device=device, device_session=device_session, gateway=gateway,
                             old_dev_eui = conflict_device_obj.dev_eui,
                             new_dev_eui = device.dev_eui,
                             prev_packet_id = device_session.last_packet_id)
-        device_session.device_id = device.id
+        if device_session.device_id is None or device.id != device_session.device_id:
+            device_session.device_id = device.id
+            session.commit()
     chrono.stop()
 
     chrono.start("guesses")
@@ -164,7 +165,7 @@ def process_packet(packet, policy):
     if packet.m_type == "JoinRequest" and device:
         # Check if DevNonce is repeated and save it
         prev_packet_id = DevNonce.saveIfNotExists(packet.dev_nonce, device.id, packet.id) 
-        if prev_packet_id and (device.has_joined or device.join_inferred):
+        if prev_packet_id and device.has_joined:
             device.repeated_dev_nonce = True
         
             if policy.is_enabled("LAF-001"):
@@ -173,19 +174,6 @@ def process_packet(packet, policy):
                             prev_packet_id=prev_packet_id)
         elif not(prev_packet_id):
             device.has_joined=False
-            device.join_inferred=False
-
-    
-    elif packet.m_type == "JoinAccept":
-        # If we don't know the deveui, check if the last packet received in that datacollector is a JoinReq
-        if packet.dev_eui is None:
-            last_packet= Packet.find_previous_by_data_collector_and_dev_eui(packet.date, packet.data_collector_id, None)
-            if last_packet is not None and last_packet.m_type == "JoinRequest":
-                    device = Device.find_with(dev_eui = last_packet.dev_eui, data_collector_id = last_packet.organization_id)
-                    if device is not None:
-                        device.join_accept_counter+= 1
-                        device.join_inferred= True
-
 
     is_uplink_packet = packet.m_type in ["UnconfirmedDataUp", "ConfirmedDataUp"]
     if device_session and is_uplink_packet and packet.f_count is not None:
@@ -199,11 +187,8 @@ def process_packet(packet, policy):
                     if device and device.has_joined:
                         # The counter = 0  is valid, then change the has_joined flag
                         device.has_joined = False
-
-                    elif device and device.join_inferred:
-                        # The counter = 0  is valid, then change the join_inferred flag
-                        device.join_inferred = False
                     device_session.reset_counter += 1
+                    session.commit()
         last_uplink_mic[device_session.id]= packet.mic
 
     # Check alert LAF-007

@@ -1,4 +1,5 @@
-from db.Models import Device, Gateway, Issue, AlertType, GatewayToDevice
+from db.Models import Device, Gateway, Issue, AlertType
+from db.Models import cGatewayToDevice as GatewayToDevice
 from datetime import date
 from utils import emit_alert
 import logging
@@ -263,7 +264,7 @@ class ResourceMeter():
                 self.device_stats[device.id]["rssi"].pop(gw_to_del, None)
                 self.device_stats[device.id]["lsnr"].pop(gw_to_del, None)
                 gw_id = self.device_stats[device.id]["gateway_id"].pop(gw_to_del, None) # get and delete entry from device stats dict
-                GatewayToDevice.delete(gateway_id=gw_id, device_id=device.id) # delete database association between gateway and device 
+                GatewayToDevice.delete(gw_id, device.id) # delete database association between gateway and device 
 
             # Update number of gateways that are listening to the device 
             device.ngateways_connected_to = len(list(self.device_stats[device.id]["gateway_id"].keys()))

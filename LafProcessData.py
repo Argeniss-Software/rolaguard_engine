@@ -119,14 +119,10 @@ def processData():
             chrono.stop()
             chrono.start("proccess packet")
             for packet in session_packets:
-                # log.debug("Using packet: %d"%(packet.id))
-
+              
                 inner_chrono.start("Set policy")
                 policy_manager.use_policy(packet.data_collector_id)
                 inner_chrono.stop()
-                # log.debug("Using policy: {name} ({id})".\
-                    #format(name = policy_manager.active_policy.name,
-                    #       id = policy_manager.active_policy.id))
 
                 if options.bforce or options.analyze_ia:
                     while packet.id >= main_analyzer_last_row:
@@ -175,16 +171,16 @@ def processData():
 
                 if options.parse:
                     LafPrinter.printPacket(packet)
-
-                # Commit objects in DB before starting with the next packet
-                try:
-                    inner_chrono.start("commit")
-                    commit()
-                    inner_chrono.stop()
-                except Exception as exc:
-                    rollback()
-                    log.error("Error trying to commit after packet processing finish: {0}".format(exc))
                 inner_chrono.lap()
+            chrono.stop()
+
+            try:
+                chrono.start("commit")
+                commit()
+                chrono.stop()
+            except Exception as exc:
+                rollback()
+                log.error("Error trying to commit after packet processing finish: {0}".format(exc))
                 
             if options.report_stats:
                 chrono.start("stats")
@@ -203,8 +199,7 @@ def processData():
                     report_last_print = 0
                 else:
                     report_last_print += 1
-                chrono.start("stop")
-        chrono.lap()
+            chrono.lap()
 
 def import_analyzers():
     if options.parse:

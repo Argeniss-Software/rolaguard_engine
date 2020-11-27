@@ -117,6 +117,6 @@ def print_alert(alert):
         collector= DataCollector.get(alert.data_collector_id)
         if collector:
             message= message.replace('{'+'collector.name'+'}', collector.name+' (ID '+str(collector.id)+')')
+        logging.debug(message)
     except Exception as e:
         logging.error('Error printing alert: {0}'.format(e))
-    logging.debug(message)
