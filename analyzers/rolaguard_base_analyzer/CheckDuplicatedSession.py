@@ -63,7 +63,7 @@ class CheckDuplicatedSession():
         possible existance of a duplicated session.
         """
         if (
-            (counter > 16 or prev_counter < 65520) and \
+            (counter > 8 and prev_counter < 65528) and \
             (
                 (counter < prev_counter) or \
                 ((counter == prev_counter) and (mic != prev_mic) and (date - prev_date).seconds > 30)
