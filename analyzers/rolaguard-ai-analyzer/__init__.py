@@ -1,0 +1,1 @@
+from analyzers.rolaguard_ai_analyzer.LafPacketAnalysisIA import process_packet
