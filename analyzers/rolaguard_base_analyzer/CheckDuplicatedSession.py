@@ -43,7 +43,7 @@ class CheckDuplicatedSession():
                 emit_alert(
                     "LAF-007", packet, device=device,
                     device_session=device_session, gateway=gateway,
-                    counter=device_session.up_link_counter,
+                    counter=self.last_packet[lpacket_uid]["f_count"],
                     new_counter=packet.f_count,
                     prev_packet_id=device_session.last_packet_id
                     )
