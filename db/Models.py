@@ -182,7 +182,7 @@ class DataCollector(Base):
     id = Column(BigIntegerType, primary_key=True, autoincrement=True)
     data_collector_type_id = Column(BigIntegerType, ForeignKey("data_collector_type.id"), nullable=False)
     type = relationship("DataCollectorType", lazy="joined")
-    policy = relationship("Policy", lazy="joined")
+    policy = relationship("Policy", lazy="joined",back_populates="data_collectors")
     name = Column(String(120), nullable=False)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False)
@@ -971,7 +971,7 @@ class Policy(Base):
     items = relationship("PolicyItem", lazy="joined", cascade="all, delete-orphan")
     organization_id = Column(BigInteger, ForeignKey("organization.id"), nullable=True)
     is_default = Column(Boolean, nullable=False)
-    data_collectors = relationship("DataCollector", lazy="joined")
+    data_collectors = relationship("DataCollector", lazy="joined",back_populates="policy")
 
     def add_missing_item(self, alert_type_code):
         """
