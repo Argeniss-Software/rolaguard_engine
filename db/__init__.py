@@ -2,6 +2,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 import os
+import logging
+import time
 
 DB_HOST = os.environ["DB_HOST"] 
 DB_NAME = os.environ["DB_NAME"] 
@@ -16,8 +18,15 @@ sessionBuilder = sessionmaker(autoflush=False)
 sessionBuilder.configure(bind=engine)
 session = sessionBuilder()
 
+while True:
+    try:
+        engine.connect()
+        break
+    except Exception as exc:
+        logging.warning("Couldn't connect with postgres. Retrying connection.")
+        time.sleep(1)
+
 from db.Models import AlertType, RowProcessed, rollback, commit
-import logging
 
 try:
     if RowProcessed.count() == 0:
