@@ -1,4 +1,4 @@
-FROM golang:1.14.2-buster
+FROM golang:1.17.3-buster
 
 RUN apt-get update && apt-get install -y python3-pip
 
@@ -18,6 +18,7 @@ RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
 ADD . /root/app/
 
 # Install go dependencies
+RUN go env -w GO111MODULE=off
 RUN go get -d ./...
 
 # Compile go library
