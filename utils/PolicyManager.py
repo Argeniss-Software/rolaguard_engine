@@ -19,8 +19,13 @@ class PolicyManager():
             if self.needs_reloading:
                 self.reload_policies()
             if self.active_dc_id != data_collector_id:
-                self.active_policy = self.policy[self.policy_by_dc[data_collector_id]]
+
+                if data_collector_id in self.policy_by_dc: 
+                    self.active_policy = self.policy[self.policy_by_dc[data_collector_id]]
+                else: 
+                    self.active_policy = self.policy[1]
                 self.active_dc_id = data_collector_id
+                
         except Exception as exc:
             log.error(f"Error trying to change the active policy: {exc}")
 
