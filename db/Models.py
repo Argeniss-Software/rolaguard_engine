@@ -633,6 +633,7 @@ class DeviceSession(Base):
     dev_addr = Column(String(8), nullable=False)
 
     up_link_counter = Column(Integer, nullable=False, default=-1)
+    spread_factor = Column(String(8), nullable=True)
 
     device_id = Column(BigIntegerType, ForeignKey("device.id"), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
@@ -656,7 +657,8 @@ class DeviceSession(Base):
             organization_id = packet.organization_id,
             connected = True,
             last_activity = packet.date,
-            data_collector_id = packet.data_collector_id
+            data_collector_id = packet.data_collector_id,
+            spread_factor = (json.loads(packet.datr))['spread_factor']
         )
 
     @classmethod
@@ -684,6 +686,8 @@ class DeviceSession(Base):
                 self.up_link_counter = packet.f_count
             self.last_packet_id = packet.id
         self.last_activity = packet.date
+        if packet.datr is not None:
+            self.spread_factor = (json.loads(packet.datr))['spread_factor']
 
 
 
