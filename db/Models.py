@@ -633,7 +633,7 @@ class DeviceSession(Base):
     dev_addr = Column(String(8), nullable=False)
 
     up_link_counter = Column(Integer, nullable=False, default=-1)
-    spread_factor = Column(String(8), nullable=True)
+    spread_factor = Column(String(8), nullable=True, default='')
 
     device_id = Column(BigIntegerType, ForeignKey("device.id"), nullable=True)
     organization_id = Column(BigIntegerType, ForeignKey("organization.id"), nullable=False)
