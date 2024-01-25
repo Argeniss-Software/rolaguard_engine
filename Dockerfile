@@ -10,6 +10,9 @@ ENV GOPATH="/root/go"
 # Add the python requirements first in order to docker cache them
 ADD ./requirements.txt /root/app/requirements.txt
 
+# Set variable env to allow deprecated package
+ENV SKLEARN_ALLOW_DEPRECATED_SKLEARN_PACKAGE_INSTALL=True
+
 # Install any needed packages specified in requirements.txt
 RUN pip3 install --upgrade pip setuptools wheel
 RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
